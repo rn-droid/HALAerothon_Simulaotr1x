@@ -1,0 +1,19 @@
+{
+    "design_vector": [
+        49.8,
+        22.4,
+        0.5,
+        4.0,
+        32.7,
+        7.95
+    ],
+    "baseline_endurance_h": 22.972394092228452,
+    "hybrid_endurance_h": 14.36085907113129,
+    "improvement_pct": -37.48644998220033,
+    "fuel_breakdown": {
+        "Baseline": 26.30935576250424,
+        "Constant-BSFC": 1000.0,
+        "AdaptiveECMS": 21.702264189322058,
+        "AdaptiveECMS+Regen": 21.702264189322058
+    }
+}

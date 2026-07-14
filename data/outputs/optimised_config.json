@@ -1,0 +1,21 @@
+{
+  "bat_kWh": 40.0,
+  "eng_kW": 80.0,
+  "twin_motors": true,
+  "m_engine_kg": 40.0,
+  "m_gen_kg": 16.0,
+  "m_bat_kg": 200.0,
+  "m_motor_kg": 24.0,
+  "m_pe_kg": 12.0,
+  "m_prop_kg": 792.0,
+  "m_fuel_kg": 20.0,
+  "mtow_kg": 812.0,
+  "mtow_margin_kg": 188.0,
+  "fuel_burned_kg": 20.0,
+  "final_soc_pct": 22.74,
+  "loiter_min": 20.0,
+  "crate_max": 1.533,
+  "soc_violated": false,
+  "mtow_violated": false,
+  "shaft_energy_kWh": 81.789
+}

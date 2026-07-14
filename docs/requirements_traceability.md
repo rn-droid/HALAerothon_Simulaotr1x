@@ -1,0 +1,11 @@
+# Requirements Traceability Matrix
+
+This table maps the project evaluation criteria to the specific models, modules, and outputs in the codebase that address them.
+
+| Evaluation Criterion | Code Module(s) | Algorithmic Implementation | Output / Validation Artifact |
+| :--- | :--- | :--- | :--- |
+| **Mission Feasibility (20%)** | `sizing/sizing_equations.py`<br>`sim/hybrid_sim.py` | The iterative sizing loop rigorously converges the Total Mass ($M_{TOW}$). Power caps are strictly enforced during the hybrid sim; if required power exceeds installed power (e.g. during climb), the mission is aborted (`feasible = False`). | Dashboard Tab 6: Mission Feasibility (Pass/Fail table per phase). |
+| **Optimization Quality (25%)** | `optimize/nsga2_runner.py` | Multi-objective NSGA-II solver over a 6-variable design space. Bounds and constraints (mass $\le$ MTOW limit, strict feasibility) are enforced. ECMS factor $s$ is optimized simultaneously with physical sizing. | Dashboard Tab 7: Pareto Front (Endurance vs. Mass scatter). |
+| **Engineering Justification (20%)** | `sim/aircraft.py`<br>`sim/engine.py`<br>`sim/ecms.py`<br>`sim/pmp.py` | Accurate physical formulations: parabolic drag polar, lookup-table BSFC curve mapping off-design inefficiencies, realistic C-rate battery limits. Theoretical PMP validates the heuristic ECMS performance. | `docs/methodology.md`<br>Dashboard Tab 5: Component Efficiency.<br>`report/ecms_vs_pmp.png` |
+| **Innovation (15%)** | `sim/supercap.py`<br>`sim/hybrid_sim.py`<br>`sim/ecms.py` | 1) Supercapacitor absorbs high-frequency power transients $> 2$ kW/s.<br>2) Descent regenerative braking with active windmilling drag.<br>3) Adaptive ECMS with proportional SoC feedback preventing drift. | Dashboard Tab 2: Power Split.<br>Dashboard Tab 3: Battery SoC (Planned vs Actual). |
+| **Endurance Maximization (20%)** | `validate/full_validation.py`<br>`optimize/nsga2_runner.py` | NSGA-II directly maximizes endurance subject to mass. The validation script performs a 3-way fuel savings breakdown to isolate the improvements from the architecture, the ECMS, and regen. | Dashboard Tab 4: Fuel Consumption (Stacked breakdown).<br>Dashboard Tab 1: Mission Profile. |

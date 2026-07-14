@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UAV-HE1 Propulsion System — Engineering Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ─── RESET & BASE ─── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --black:       #04050a;
+  --black2:      #080c14;
+  --panel-bg:    rgba(8, 12, 20, 0.72);
+  --panel-border:rgba(255,255,255,0.05);
+  --panel-glow:  rgba(255, 160, 80, 0.08);
+  --copper:      #c87941;
+  --copper-light:#e8a060;
+  --amber:       #f5a623;
+  --teal:        #2dd4bf;
+  --teal-dim:    rgba(45,212,191,0.15);
+  --green:       #10d48e;
+  --green-dim:   rgba(16,212,142,0.12);
+  --red:         #e84040;
+  --red-dim:     rgba(232,64,64,0.12);
+  --purple:      #8b6cf7;
+  --purple-dim:  rgba(139,108,247,0.12);
+  --blue:        #3b9eff;
+  --blue-dim:    rgba(59,158,255,0.12);
+  --text-1:      #f0ece6;
+  --text-2:      #8a8a9a;
+  --text-3:      #50505f;
+  --mono:        'JetBrains Mono', monospace;
+  --sans:        'Inter', system-ui, sans-serif;
+}
+
+html, body {
+  width: 100%; min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--black);
+  font-family: var(--sans);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── TOP BAR ─── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px;
+  background: linear-gradient(180deg, rgba(4,5,10,0.98) 0%, rgba(4,5,10,0) 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.brand {
+  font-size: 13px; font-weight: 600; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--text-1);
+}
+.brand span { color: var(--copper); }
+.sep { width: 1px; height: 18px; background: var(--panel-border); }
+.designation {
+  font-family: var(--mono); font-size: 10px; color: var(--text-3);
+  letter-spacing: 1px;
+}
+.topbar-pills { display: flex; gap: 10px; }
+.pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  font-family: var(--mono); font-size: 10px; color: var(--text-2);
+}
+.pill .val { color: var(--copper-light); font-weight: 500; }
+.status-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ─── MAIN CANVAS LAYOUT ─── */
+.scene {
+  width: 100%; min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: 52px minmax(500px, 1fr) auto;
+  gap: 0;
+}
+
+/* ─── 3D HERO CENTER ─── */
+.hero {
+  grid-column: 2; grid-row: 2;
+  position: relative;
+  overflow: hidden;
+  background: #04050a;
+}
+#three-mount {
+  position: absolute; inset: 0;
+  cursor: grab;
+}
+#three-mount:active { cursor: grabbing; }
+#three-mount canvas {
+  display: block; /* Three.js creates its own canvas */
+}
+.hero-status {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text-3); z-index: 5;
+  text-align: center; pointer-events: none;
+}
+.hero-status.error { color: var(--red); }
+.hero-status.hidden { display: none; }
+
+/* Phase label overlay */
+.phase-overlay {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 10;
+  display: flex; gap: 8px;
+}
+.ph {
+  padding: 4px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: 9px; font-weight: 500;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  border: 1px solid;
+  opacity: 0.5; transition: all 0.3s;
+}
+.ph.active { opacity: 1; }
+.ph.takeoff { border-color: var(--red); color: var(--red); }
+.ph.climb   { border-color: var(--amber); color: var(--amber); }
+.ph.cruise  { border-color: var(--blue); color: var(--blue); }
+.ph.loiter  { border-color: var(--purple); color: var(--purple); }
+.ph.descent { border-color: var(--green); color: var(--green); }
+.ph.landing { border-color: var(--text-3); color: var(--text-3); }
+
+/* ─── SIDE PANELS ─── */
+.panel-left {
+  grid-column: 1; grid-row: 2;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 12px 14px; padding-top: 60px;
+}
+.panel-right {
+  grid-column: 3; grid-row: 2;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 12px 14px; padding-top: 60px;
+}
+
+/* ─── BOTTOM PANELS ─── */
+.panel-bottom {
+  grid-column: 1 / -1; grid-row: 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1px;
+  padding: 0 14px 14px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+/* ─── CARD ─── */
+.card {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 14px;
+  backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--panel-glow);
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.3s;
+}
+.card:hover::before { opacity: 1; }
+
+/* Card accent bar */
+.card[data-accent="copper"]  { border-left: 2px solid var(--copper); }
+.card[data-accent="teal"]    { border-left: 2px solid var(--teal); }
+.card[data-accent="green"]   { border-left: 2px solid var(--green); }
+.card[data-accent="red"]     { border-left: 2px solid var(--red); }
+.card[data-accent="purple"]  { border-left: 2px solid var(--purple); }
+.card[data-accent="blue"]    { border-left: 2px solid var(--blue); }
+.card[data-accent="amber"]   { border-left: 2px solid var(--amber); }
+
+.card-label {
+  font-family: var(--mono); font-size: 9px; font-weight: 400;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 6px;
+}
+.card-value {
+  font-family: var(--mono); font-size: 22px; font-weight: 300;
+  line-height: 1; color: var(--text-1);
+}
+.card-value .unit {
+  font-size: 11px; color: var(--text-3); margin-left: 3px; font-weight: 400;
+}
+.card-sub { font-size: 10px; color: var(--text-3); margin-top: 4px; }
+
+/* Mini sparkline */
+.sparkline { width: 100%; height: 36px; margin-top: 8px; }
+.sparkline canvas { width: 100% !important; height: 36px !important; }
+
+/* ─── BOTTOM CHART CARDS ─── */
+.bchart {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+.bchart-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 6px;
+}
+.bchart-title {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--text-3);
+}
+.bchart-val {
+  font-family: var(--mono); font-size: 13px; color: var(--text-1);
+}
+.chart-wrap { height: 110px; position: relative; }
+.chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+/* ─── SOC BAR ─── */
+.soc-bar-wrap { margin-top: 8px; }
+.soc-track {
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.06); position: relative;
+}
+.soc-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--red) 0%, var(--amber) 40%, var(--green) 80%);
+  transition: width 0.8s ease;
+}
+.soc-limits {
+  display: flex; justify-content: space-between;
+  margin-top: 3px; font-family: var(--mono); font-size: 8px; color: var(--text-3);
+}
+
+/* ─── DIVIDER ─── */
+.divider {
+  height: 1px; background: var(--panel-border);
+  margin: 8px 0;
+}
+
+/* ─── PARETO MINI ─── */
+.pareto-legend {
+  display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;
+}
+.p-leg-item {
+  display: flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 9px; color: var(--text-3);
+}
+.p-leg-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* ─── CONTROLS OVERLAY ─── */
+.controls {
+  position: fixed; bottom: 236px; right: 294px; z-index: 50;
+  display: flex; flex-direction: column; gap: 6px;
+  align-items: flex-end;
+}
+.ctrl-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.ctrl-row label {
+  font-family: var(--mono); font-size: 9px; color: var(--text-3);
+  letter-spacing: 1px; text-transform: uppercase; min-width: 80px; text-align: right;
+}
+.ctrl-row input[type="range"] {
+  -webkit-appearance: none; width: 100px; height: 2px;
+  background: rgba(255,255,255,0.1); border-radius: 1px; outline: none; cursor: pointer;
+}
+.ctrl-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--copper); border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 0 8px rgba(200,121,65,0.6);
+}
+.ctrl-val {
+  font-family: var(--mono); font-size: 9px; color: var(--copper-light);
+  min-width: 48px;
+}
+.btn-sim {
+  margin-top: 4px;
+  padding: 6px 16px; border-radius: 4px; border: 1px solid var(--copper);
+  background: rgba(200,121,65,0.1); color: var(--copper-light);
+  font-family: var(--mono); font-size: 9px; letter-spacing: 2px;
+  text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+}
+.btn-sim:hover { background: rgba(200,121,65,0.2); box-shadow: 0 0 16px rgba(200,121,65,0.2); }
+.btn-sim.loading { opacity: 0.4; pointer-events: none; }
+
+/* ─── ENDURANCE RING ─── */
+.endo-wrap { text-align: center; padding: 4px 0; }
+.endo-ring { position: relative; display: inline-block; width: 72px; height: 72px; }
+.endo-ring svg { width: 72px; height: 72px; transform: rotate(-90deg); }
+.endo-ring circle { fill: none; stroke-width: 3; }
+.endo-bg { stroke: rgba(255,255,255,0.06); }
+.endo-fg { stroke: var(--green); stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+.endo-text {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.endo-num {
+  font-family: var(--mono); font-size: 18px; font-weight: 300; line-height: 1;
+}
+.endo-unit { font-family: var(--mono); font-size: 8px; color: var(--text-3); margin-top: 1px; }
+
+/* ─── EFFICIENCY GAUGE ─── */
+.gauge-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.gauge-bar {
+  flex: 1; height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.06); position: relative;
+}
+.gauge-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.8s ease;
+}
+.gauge-label {
+  font-family: var(--mono); font-size: 9px; color: var(--text-3);
+  min-width: 28px; text-align: right;
+}
+
+/* ─── SCROLLBAR HIDE ─── */
+::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ─── TOP BAR ─── -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="brand">UAV<span>—HE1</span></div>
+    <div class="sep"></div>
+    <div class="designation">HYBRID-ELECTRIC PROPULSION SYSTEM / DIGITAL TWIN v7.0</div>
+  </div>
+  <div class="topbar-pills">
+    <div class="pill"><span class="status-dot"></span>LIVE SIM</div>
+    <div class="pill">MTOW <span class="val" id="p-mtow">874 kg</span></div>
+    <div class="pill">ENGINE <span class="val" id="p-eng">60 kW</span></div>
+    <div class="pill">BATTERY <span class="val" id="p-bat">55 kWh</span></div>
+    <div class="pill">η <span class="val" id="p-eta">—</span></div>
+  </div>
+</div>
+
+<!-- ─── MAIN SCENE ─── -->
+<div class="scene">
+
+  <!-- LEFT PANELS -->
+  <div class="panel-left">
+
+    <div class="card" data-accent="teal">
+      <div class="card-label">Altitude</div>
+      <div class="card-value" id="v-alt">5 000<span class="unit">m</span></div>
+      <div class="card-sub">Cruise ceiling · ISA −3°C</div>
+    </div>
+
+    <div class="card" data-accent="blue">
+      <div class="card-label">Airspeed</div>
+      <div class="card-value" id="v-spd">52<span class="unit">m/s</span></div>
+      <div class="card-sub">≈ 187 km/h · Mach 0.154</div>
+    </div>
+
+    <div class="card" data-accent="red">
+      <div class="card-label">Engine Power</div>
+      <div class="card-value" id="v-eng-pw">60.0<span class="unit">kW</span></div>
+      <div class="card-sub" id="v-bsfc">BSFC — g/kWh</div>
+      <div class="sparkline"><canvas id="sp-eng"></canvas></div>
+    </div>
+
+    <div class="card" data-accent="amber">
+      <div class="card-label">Generator Output</div>
+      <div class="card-value" id="v-gen">57.0<span class="unit">kW</span></div>
+      <div class="card-sub">η_gen = 95% · AC→DC rectified</div>
+    </div>
+
+    <div class="card" data-accent="purple">
+      <div class="card-label">Fuel Remaining</div>
+      <div class="card-value" id="v-fuel-rem">20.0<span class="unit">kg</span></div>
+      <div class="card-sub" id="v-fuel-burn">Burned: 0.0 kg</div>
+      <div class="soc-bar-wrap">
+        <div class="soc-track"><div class="soc-fill" id="fuel-bar" style="width:100%;background:linear-gradient(90deg,#8b6cf7,#c87941)"></div></div>
+        <div class="soc-limits"><span>0</span><span>20 kg</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CENTER HERO -->
+  <div class="hero">
+    <div id="three-mount"></div>
+    <div class="hero-status" id="hero-status">Loading 3D model…</div>
+    <div class="phase-overlay">
+      <div class="ph takeoff" id="ph-takeoff">Takeoff</div>
+      <div class="ph climb" id="ph-climb">Climb</div>
+      <div class="ph cruise active" id="ph-cruise">Cruise</div>
+      <div class="ph loiter" id="ph-loiter">Loiter</div>
+      <div class="ph descent" id="ph-descent">Descent</div>
+      <div class="ph landing" id="ph-landing">Landing</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANELS -->
+  <div class="panel-right">
+
+    <div class="card" data-accent="green">
+      <div class="card-label">Battery SoC</div>
+      <div class="card-value" id="v-soc">90.0<span class="unit">%</span></div>
+      <div class="card-sub" id="v-crate">C-rate: — </div>
+      <div class="soc-bar-wrap">
+        <div class="soc-track">
+          <div class="soc-fill" id="soc-bar" style="width:90%"></div>
+        </div>
+        <div class="soc-limits"><span>20%</span><span>90%</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-accent="blue">
+      <div class="card-label">Motor Power</div>
+      <div class="card-value" id="v-motor">60.0<span class="unit">kW</span></div>
+      <div class="card-sub" id="v-rpm">RPM: — · Torque: — Nm</div>
+    </div>
+
+    <div class="card" data-accent="teal">
+      <div class="card-label">System Efficiency</div>
+      <div class="card-value" id="v-eta-val">—<span class="unit">%</span></div>
+      <div class="divider"></div>
+      <div class="gauge-row">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_engine</div>
+        <div class="gauge-bar"><div class="gauge-fill" id="g-eng" style="width:35%;background:var(--copper)"></div></div>
+        <div class="gauge-label" id="gl-eng">35%</div>
+      </div>
+      <div class="gauge-row">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_gen</div>
+        <div class="gauge-bar"><div class="gauge-fill" id="g-gen" style="width:95%;background:var(--amber)"></div></div>
+        <div class="gauge-label" id="gl-gen">95%</div>
+      </div>
+      <div class="gauge-row">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_motor</div>
+        <div class="gauge-bar"><div class="gauge-fill" id="g-mot" style="width:93%;background:var(--blue)"></div></div>
+        <div class="gauge-label" id="gl-mot">93%</div>
+      </div>
+      <div class="gauge-row">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_prop</div>
+        <div class="gauge-bar"><div class="gauge-fill" id="g-prop" style="width:85%;background:var(--teal)"></div></div>
+        <div class="gauge-label" id="gl-prop">85%</div>
+      </div>
+    </div>
+
+    <div class="card" data-accent="green">
+      <div class="card-label">Endurance Remaining</div>
+      <div class="endo-wrap">
+        <div class="endo-ring">
+          <svg viewBox="0 0 72 72">
+            <circle class="endo-bg" cx="36" cy="36" r="30" stroke-dasharray="188.5"/>
+            <circle class="endo-fg" cx="36" cy="36" r="30" id="endo-arc"
+              stroke-dasharray="188.5" stroke-dashoffset="60"/>
+          </svg>
+          <div class="endo-text">
+            <div class="endo-num" id="endo-num">20</div>
+            <div class="endo-unit">min</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-sub" style="text-align:center" id="endo-sub">Loiter-equivalent reserve</div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM CHARTS -->
+  <div class="panel-bottom">
+
+    <!-- Power Distribution -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">Power Split</div>
+        <div class="bchart-val" id="bv-power">— kW</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-power"></canvas></div>
+    </div>
+
+    <!-- Battery SoC Trajectory -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">SoC Trajectory</div>
+        <div class="bchart-val" id="bv-soc">— %</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-soc"></canvas></div>
+    </div>
+
+    <!-- Fuel Burn -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">Fuel Consumed</div>
+        <div class="bchart-val" id="bv-fuel">— kg</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-fuel"></canvas></div>
+    </div>
+
+    <!-- Design Pareto -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">Design Space</div>
+        <div class="bchart-val" style="color:var(--copper)">★ Opt Config</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-pareto"></canvas></div>
+      <div class="pareto-legend">
+        <div class="p-leg-item"><div class="p-leg-dot" style="background:var(--teal)"></div>Twin</div>
+        <div class="p-leg-item"><div class="p-leg-dot" style="background:var(--amber)"></div>Single</div>
+        <div class="p-leg-item"><div class="p-leg-dot" style="background:var(--copper);width:8px;height:8px"></div>Recommended</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─── CONTROLS ─── -->
+<div class="controls">
+  <div class="ctrl-row">
+    <label>Battery</label>
+    <input type="range" id="sl-bat" min="20" max="80" step="5" value="55">
+    <div class="ctrl-val" id="cv-bat">55 kWh</div>
+  </div>
+  <div class="ctrl-row">
+    <label>Cruise</label>
+    <input type="range" id="sl-cruise" min="10" max="120" step="5" value="30">
+    <div class="ctrl-val" id="cv-cruise">30 min</div>
+  </div>
+  <div class="ctrl-row">
+    <label>Loiter</label>
+    <input type="range" id="sl-loiter" min="5" max="60" step="5" value="20">
+    <div class="ctrl-val" id="cv-loiter">20 min</div>
+  </div>
+  <button class="btn-sim" id="btn-sim" onclick="rerunSim()">▶ Re-Simulate</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CHART GLOBAL DEFAULTS
+// ═══════════════════════════════════════════════════════════
+Chart.defaults.color = '#50505f';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 9;
+Chart.defaults.animation.duration = 800;
+Chart.defaults.plugins.legend.display = false;
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL STATE
+// ═══════════════════════════════════════════════════════════
+let simData = [];
+let sweepData = [];
+let charts = {};
+let simIdx = 0;
+let tickTimer = null;
+
+// ═══════════════════════════════════════════════════════════
+// DATA LOAD
+// ═══════════════════════════════════════════════════════════
+async function loadData() {
+  try {
+    const [ts, sw] = await Promise.all([
+      fetch('/api/data/timeseries').then(r => r.json()),
+      fetch('/api/data/sweep').then(r => r.json())
+    ]);
+    simData = ts;
+    sweepData = sw;
+  } catch(e) {
+    console.warn('API unreachable, using empty data');
+    simData = [];
+    sweepData = [];
+  }
+  buildCharts();
+  if (simData.length > 0) startPlayback();
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIVE PLAYBACK — scrubs through mission over time
+// ═══════════════════════════════════════════════════════════
+function startPlayback() {
+  simIdx = 0;
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
+    if (simIdx >= simData.length) { simIdx = 0; return; }
+    updateLiveReadouts(simData[simIdx]);
+    simIdx += 15; // advance 15 seconds per tick
+  }, 150);
+}
+
+function updateLiveReadouts(r) {
+  if (!r) return;
+  // Altitude & Speed
+  setText('v-alt', fmt(r.altitude_m, 0, 'm'));
+  setText('v-spd', fmt(r.airspeed_ms, 1, 'm/s'));
+  // Engine
+  setText('v-eng-pw', fmt(r.P_engine_W / 1000, 1, 'kW'));
+  setText('v-bsfc', r.bsfc_g_kWh ? `BSFC ${r.bsfc_g_kWh.toFixed(0)} g/kWh` : 'Engine idle / off');
+  // Generator
+  setText('v-gen', fmt(r.P_engine_W * 0.95 / 1000, 1, 'kW'));
+  // Fuel
+  setText('v-fuel-rem', fmt(r.fuel_remaining_kg, 1, 'kg'));
+  setText('v-fuel-burn', `Burned: ${r.fuel_burned_kg.toFixed(2)} kg`);
+  const fuelPct = Math.max(0, r.fuel_remaining_kg / 20 * 100);
+  setWidth('fuel-bar', fuelPct);
+  // Battery
+  setText('v-soc', fmt(r.soc_pct, 1, '%'));
+  setText('v-crate', `C-rate: ${r.c_rate.toFixed(2)} C`);
+  const socNorm = Math.max(0, Math.min(100, (r.soc_pct - 20) / 70 * 100));
+  setWidth('soc-bar', socNorm);
+  // Motor
+  setText('v-motor', fmt(r.P_shaft_W / 1000, 1, 'kW'));
+  setText('v-rpm', `RPM: ${r.motor_rpm ? r.motor_rpm.toFixed(0) : '—'} · ${r.motor_torque_Nm ? r.motor_torque_Nm.toFixed(0) : '—'} Nm`);
+  // Efficiency
+  const eta = r.eta_system > 0.01 && r.eta_system < 1 ? r.eta_system : null;
+  setText('v-eta-val', eta ? (eta * 100).toFixed(1) : '—');
+  document.getElementById('p-eta').textContent = eta ? (eta * 100).toFixed(1) + '%' : '—';
+  // Header pills
+  document.getElementById('p-mtow').textContent = '874 kg';
+  // Endurance
+  const endoMin = (r.endurance_remain_s / 60);
+  setText('endo-num', endoMin.toFixed(0));
+  const endoPct = Math.min(1, endoMin / 60);
+  const circ = 188.5;
+  document.getElementById('endo-arc').style.strokeDashoffset = circ * (1 - endoPct);
+  document.getElementById('endo-sub').textContent =
+    fuelPct < 15 ? '⚠ LOW FUEL' : 'Loiter-equivalent reserve';
+  // Phase highlight
+  const ph = r.phase;
+  ['takeoff','climb','cruise','loiter','descent','landing'].forEach(p => {
+    const el = document.getElementById('ph-' + p);
+    if (el) el.classList.toggle('active', ph === p.toUpperCase());
+  });
+  // 3D prop speed
+  if (ph === 'TAKEOFF' || ph === 'CLIMB') propSpeed = 0.22;
+  else if (ph === 'CRUISE') propSpeed = 0.14;
+  else if (ph === 'LOITER') propSpeed = 0.08;
+  else if (ph === 'DESCENT' || ph === 'LANDING') propSpeed = 0.06;
+  // bv bottom vals
+  setText('bv-power', (r.P_shaft_W / 1000).toFixed(1) + ' kW');
+  setText('bv-soc', r.soc_pct.toFixed(1) + '%');
+  setText('bv-fuel', r.fuel_burned_kg.toFixed(2) + ' kg');
+}
+
+function fmt(v, dec, unit) {
+  return (v !== undefined && v !== null) ? `${v.toFixed(dec)}<span class="unit">${unit}</span>` : '—';
+}
+function setText(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+function setWidth(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+// ═══════════════════════════════════════════════════════════
+// BUILD CHARTS
+// ═══════════════════════════════════════════════════════════
+function buildCharts() {
+  const d = simData.filter((_, i) => i % 20 === 0);
+  const t = d.map(r => (r.t_s / 60).toFixed(0));
+
+  buildPowerChart(d, t);
+  buildSocChart(d, t);
+  buildFuelChart(d, t);
+  buildParetoChart();
+  buildSparkline('sp-eng', d.map(r => r.P_engine_W / 1000), '#c87941');
+}
+
+const CHART_OPTS = {
+  responsive: true, maintainAspectRatio: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: { legend: { display: false }, tooltip: {
+    backgroundColor: 'rgba(8,12,20,0.95)',
+    borderColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    titleFont: { family: "'JetBrains Mono', monospace", size: 9 },
+    bodyFont:  { family: "'JetBrains Mono', monospace", size: 9 },
+  }},
+  scales: {
+    x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { maxTicksLimit: 6 } },
+    y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { maxTicksLimit: 4 } }
+  }
+};
+
+function buildPowerChart(d, t) {
+  const ctx = document.getElementById('ch-power');
+  if (charts.power) charts.power.destroy();
+  charts.power = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        {
+          label: 'Engine kW',
+          data: d.map(r => r.P_engine_W / 1000),
+          borderColor: '#c87941', borderWidth: 1.5,
+          backgroundColor: 'rgba(200,121,65,0.1)', fill: true,
+          tension: 0.3, pointRadius: 0
+        },
+        {
+          label: 'Battery kW',
+          data: d.map(r => r.P_battery_W / 1000),
+          borderColor: '#10d48e', borderWidth: 1.5,
+          backgroundColor: 'rgba(16,212,142,0.08)', fill: true,
+          tension: 0.3, pointRadius: 0
+        }
+      ]
+    },
+    options: { ...CHART_OPTS }
+  });
+}
+
+function buildSocChart(d, t) {
+  const ctx = document.getElementById('ch-soc');
+  if (charts.soc) charts.soc.destroy();
+  charts.soc = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        {
+          data: d.map(r => r.soc_pct),
+          borderColor: '#10d48e', borderWidth: 1.5,
+          backgroundColor: 'rgba(16,212,142,0.08)', fill: true,
+          tension: 0.4, pointRadius: 0
+        },
+        {
+          data: d.map(() => 20),
+          borderColor: 'rgba(232,64,64,0.4)', borderWidth: 1,
+          borderDash: [4, 4], pointRadius: 0, fill: false
+        }
+      ]
+    },
+    options: {
+      ...CHART_OPTS,
+      scales: {
+        ...CHART_OPTS.scales,
+        y: { ...CHART_OPTS.scales.y, min: 10, max: 100 }
+      }
+    }
+  });
+}
+
+function buildFuelChart(d, t) {
+  const ctx = document.getElementById('ch-fuel');
+  if (charts.fuel) charts.fuel.destroy();
+  charts.fuel = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [{
+        data: d.map(r => r.fuel_burned_kg),
+        borderColor: '#8b6cf7', borderWidth: 1.5,
+        backgroundColor: 'rgba(139,108,247,0.1)', fill: true,
+        tension: 0.3, pointRadius: 0
+      }]
+    },
+    options: { ...CHART_OPTS }
+  });
+}
+
+function buildParetoChart() {
+  const ctx = document.getElementById('ch-pareto');
+  if (charts.pareto) charts.pareto.destroy();
+  const feasible = sweepData.filter(r => !r.soc_violated && !r.mtow_violated && r.fuel_burned_kg > 0);
+  const twin   = feasible.filter(r =>  r.twin_motors);
+  const single = feasible.filter(r => !r.twin_motors);
+  charts.pareto = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          data: twin.map(r => ({ x: r.fuel_burned_kg, y: r.m_prop_kg })),
+          backgroundColor: 'rgba(45,212,191,0.35)', borderColor: 'rgba(45,212,191,0.6)',
+          pointRadius: 3, pointHoverRadius: 4
+        },
+        {
+          data: single.map(r => ({ x: r.fuel_burned_kg, y: r.m_prop_kg })),
+          backgroundColor: 'rgba(245,166,35,0.35)', borderColor: 'rgba(245,166,35,0.6)',
+          pointRadius: 3, pointHoverRadius: 4
+        },
+        {
+          data: [{ x: 20.0, y: 792 }],
+          backgroundColor: '#c87941', borderColor: '#e8a060',
+          pointRadius: 7, pointStyle: 'star', pointHoverRadius: 9
+        }
+      ]
+    },
+    options: {
+      ...CHART_OPTS,
+      scales: {
+        x: { ...CHART_OPTS.scales.x, title: { display: true, text: 'Fuel (kg)', color: '#50505f', font: { size: 8 } } },
+        y: { ...CHART_OPTS.scales.y, title: { display: true, text: 'Mass (kg)', color: '#50505f', font: { size: 8 } } }
+      }
+    }
+  });
+}
+
+function buildSparkline(id, data, color) {
+  const ctx = document.getElementById(id);
+  if (!ctx || !data.length) return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map((_,i) => i),
+      datasets: [{
+        data: data,
+        borderColor: color, borderWidth: 1.5,
+        fill: true, backgroundColor: color.replace(')', ',0.08)').replace('rgb', 'rgba'),
+        tension: 0.4, pointRadius: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { display: false },
+        y: { display: false }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// RE-RUN SIMULATION
+// ═══════════════════════════════════════════════════════════
+async function rerunSim() {
+  const btn = document.getElementById('btn-sim');
+  btn.classList.add('loading');
+  btn.textContent = '⟳ Running...';
+  try {
+    const res = await fetch('/api/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bat_kWh: +document.getElementById('sl-bat').value,
+        cruise_duration_min: +document.getElementById('sl-cruise').value,
+        loiter_duration_min: +document.getElementById('sl-loiter').value,
+        cruise_alt_m: 5000
+      })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      simData = json.data;
+      document.getElementById('p-bat').textContent = document.getElementById('sl-bat').value + ' kWh';
+      buildCharts();
+      startPlayback();
+    }
+  } catch(e) { console.error(e); }
+  btn.classList.remove('loading');
+  btn.textContent = '▶ Re-Simulate';
+}
+
+// Slider labels
+document.getElementById('sl-bat').oninput    = function() { document.getElementById('cv-bat').textContent    = this.value + ' kWh'; };
+document.getElementById('sl-cruise').oninput = function() { document.getElementById('cv-cruise').textContent = this.value + ' min'; };
+document.getElementById('sl-loiter').oninput = function() { document.getElementById('cv-loiter').textContent = this.value + ' min'; };
+
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// THREE.JS — UAV HERO MODEL
+// ═══════════════════════════════════════════════════════════
+let propSpeed = 0.12;
+let propL_ref, propR_ref, engGlow_ref, batGlow_ref;
+
+function init3D() {
+  const mount = document.getElementById('three-mount');
+  const status = document.getElementById('hero-status');
+
+  // Check Three.js loaded
+  if (typeof THREE === 'undefined') {
+    status.textContent = '⚠ Three.js failed to load from CDN';
+    status.classList.add('error');
+    console.error('THREE is undefined — CDN script did not load');
+    return;
+  }
+
+  // Get container dimensions
+  const W = mount.clientWidth;
+  const H = mount.clientHeight;
+
+  if (W < 50 || H < 50) {
+    // Grid layout not ready yet — retry
+    setTimeout(init3D, 150);
+    return;
+  }
+
+  try {
+    // ── RENDERER — let Three.js create its own canvas ──
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x04050a, 1);
+    mount.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 200);
+    camera.position.set(6, 3, 5);
+    camera.lookAt(0, 0, 0);
+
+    // ── LIGHTS ──────────────────────────
+    scene.add(new THREE.AmbientLight(0x303050, 1.5));
+    scene.add(new THREE.HemisphereLight(0x4060a0, 0x101010, 1.2));
+
+    // Key light — warm
+    const key = new THREE.DirectionalLight(0xfff0d0, 3.5);
+    key.position.set(6, 8, 4);
+    scene.add(key);
+
+    // Rim 1 — STRONG copper from rear-left (cinematic rim)
+    const rim1 = new THREE.DirectionalLight(0xe09050, 5.0);
+    rim1.position.set(-8, 2, -4);
+    scene.add(rim1);
+
+    // Rim 2 — teal from rear-right
+    const rim2 = new THREE.DirectionalLight(0x40c0b0, 2.5);
+    rim2.position.set(-3, 0, 7);
+    scene.add(rim2);
+
+    // Fill from front
+    const fill = new THREE.DirectionalLight(0x405080, 1.5);
+    fill.position.set(5, -1, 0);
+    scene.add(fill);
+
+    // ── MATERIALS (MeshPhongMaterial — reliable, no PBR issues) ──
+    const matBody = new THREE.MeshPhongMaterial({
+      color: 0x445570, specular: 0x556677, shininess: 40
+    });
+    const matCowl = new THREE.MeshPhongMaterial({
+      color: 0x556680, specular: 0x8899aa, shininess: 80
+    });
+    const matEngine = new THREE.MeshPhongMaterial({
+      color: 0x884422, specular: 0xaa6633, shininess: 60,
+      emissive: 0x331100, emissiveIntensity: 0.8
+    });
+    const matBattery = new THREE.MeshPhongMaterial({
+      color: 0x228855, specular: 0x33aa66, shininess: 40,
+      emissive: 0x004420, emissiveIntensity: 0.6
+    });
+    const matMotor = new THREE.MeshPhongMaterial({
+      color: 0x2255aa, specular: 0x4488cc, shininess: 80,
+      emissive: 0x001144, emissiveIntensity: 0.5
+    });
+    const matFuel = new THREE.MeshPhongMaterial({
+      color: 0x6633aa, specular: 0x8855cc, shininess: 60,
+      emissive: 0x220055, emissiveIntensity: 0.5,
+      transparent: true, opacity: 0.8
+    });
+    const matGlass = new THREE.MeshPhongMaterial({
+      color: 0x3388aa, specular: 0x66bbdd, shininess: 100,
+      emissive: 0x115577, emissiveIntensity: 1.0,
+      transparent: true, opacity: 0.7
+    });
+
+    const uav = new THREE.Group();
+
+    // ── FUSELAGE ─────────────────────────
+    const fuse = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.20, 3.8, 32),
+      matBody
+    );
+    fuse.rotation.z = Math.PI / 2;
+    uav.add(fuse);
+
+    // Panel line rings
+    const matRing = new THREE.MeshPhongMaterial({ color: 0x2a3040, shininess: 20 });
+    [-1.0, -0.3, 0.4, 1.1].forEach(function(x) {
+      var ring = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.008, 6, 32), matRing);
+      ring.rotation.y = Math.PI / 2;
+      ring.position.x = x;
+      uav.add(ring);
+    });
+
+    // Nose cone
+    const nose = new THREE.Mesh(
+      new THREE.ConeGeometry(0.28, 0.9, 32),
+      matBody
+    );
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 2.35;
+    uav.add(nose);
+
+    // Sensor dome
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 24, 16),
+      matGlass
+    );
+    dome.position.set(2.7, 0, 0);
+    uav.add(dome);
+
+    // Sensor glow
+    var sg = new THREE.PointLight(0x40c0e0, 2.5, 3.0);
+    sg.position.set(2.8, 0, 0);
+    uav.add(sg);
+
+    // Rear taper
+    const rear = new THREE.Mesh(
+      new THREE.ConeGeometry(0.20, 0.5, 32),
+      matBody
+    );
+    rear.rotation.z = Math.PI / 2;
+    rear.position.x = -2.15;
+    uav.add(rear);
+
+    // ── WINGS (simple box — guaranteed to work) ──
+    var wingL = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 5.0), matBody);
+    wingL.position.set(0, 0.02, -2.5);
+    uav.add(wingL);
+
+    var wingR = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 5.0), matBody);
+    wingR.position.set(0, 0.02, 2.5);
+    uav.add(wingR);
+
+    // Wingtip nav lights
+    var navL = new THREE.PointLight(0xff0000, 1.5, 2.0);
+    navL.position.set(0, 0, -5.0);
+    uav.add(navL);
+    var navR = new THREE.PointLight(0x00ff00, 1.5, 2.0);
+    navR.position.set(0, 0, 5.0);
+    uav.add(navR);
+
+    // ── TAIL ───────────────────────────
+    var htL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, 1.3), matBody);
+    htL.position.set(-1.65, 0.30, -0.65);
+    uav.add(htL);
+    var htR = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, 1.3), matBody);
+    htR.position.set(-1.65, 0.30, 0.65);
+    uav.add(htR);
+    var vt = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.85, 0.04), matBody);
+    vt.position.set(-1.65, 0.72, 0);
+    uav.add(vt);
+    var tailGlow = new THREE.PointLight(0xff4400, 1.5, 3.0);
+    tailGlow.position.set(-1.8, 0.3, 0);
+    uav.add(tailGlow);
+
+    // ── NACELLES + MOTORS ────────────────
+    function makeNacelle(z) {
+      var g = new THREE.Group();
+
+      // Nacelle body
+      var nac = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.11, 0.7, 16), matCowl
+      );
+      nac.rotation.z = Math.PI / 2;
+      g.add(nac);
+
+      // Motor
+      var mot = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.11, 0.35, 16), matMotor
+      );
+      mot.rotation.z = Math.PI / 2;
+      mot.position.x = 0.45;
+      g.add(mot);
+
+      // Spinner
+      var spin = new THREE.Mesh(
+        new THREE.ConeGeometry(0.06, 0.15, 12), matCowl
+      );
+      spin.rotation.z = -Math.PI / 2;
+      spin.position.x = 0.7;
+      g.add(spin);
+
+      // 3 Prop blades
+      var bladeMat = new THREE.MeshPhongMaterial({ color: 0x708090, specular: 0xaabbcc, shininess: 100 });
+      var propGroup = new THREE.Group();
+      for (var i = 0; i < 3; i++) {
+        var blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.015), bladeMat);
+        blade.position.y = 0.25;
+        var arm = new THREE.Group();
+        arm.add(blade);
+        arm.rotation.z = (i * Math.PI * 2) / 3;
+        propGroup.add(arm);
+      }
+      propGroup.rotation.z = Math.PI / 2;
+      propGroup.position.x = 0.65;
+      g.add(propGroup);
+      g.userData.prop = propGroup;
+
+      // Motor glow
+      var glow = new THREE.PointLight(0x4488ff, 2.5, 2.5);
+      glow.position.set(0.5, 0, 0);
+      g.add(glow);
+
+      // Strut
+      var strut = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.05), matBody);
+      strut.position.set(0, 0.2, 0);
+      g.add(strut);
+
+      g.position.set(0.15, -0.08, z);
+      return g;
+    }
+
+    var nacL = makeNacelle(-1.8);
+    var nacR = makeNacelle(1.8);
+    uav.add(nacL);
+    uav.add(nacR);
+    propL_ref = nacL;
+    propR_ref = nacR;
+
+    // ── TURBOSHAFT ENGINE ──
+    var eng = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.20, 0.20, 0.6, 16), matEngine
+    );
+    eng.rotation.z = Math.PI / 2;
+    eng.position.set(-1.1, 0, 0);
+    uav.add(eng);
+
+    // Engine detail rings
+    for (var i = 0; i < 3; i++) {
+      var er = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.012, 6, 20), matEngine);
+      er.rotation.y = Math.PI / 2;
+      er.position.set(-0.9 + i * 0.15, 0, 0);
+      uav.add(er);
+    }
+
+    // Exhaust nozzle
+    var exh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.22, 0.15, 16),
+      new THREE.MeshPhongMaterial({
+        color: 0x553311, emissive: 0x662200, emissiveIntensity: 1.5, shininess: 50
+      })
+    );
+    exh.rotation.z = Math.PI / 2;
+    exh.position.set(-1.45, 0, 0);
+    uav.add(exh);
+
+    // Engine heat glow
+    var eGlow = new THREE.PointLight(0xff4400, 4.0, 4.5);
+    eGlow.position.set(-1.6, 0, 0);
+    uav.add(eGlow);
+    engGlow_ref = eGlow;
+
+    // ── BATTERY PACK ──
+    var bat = new THREE.Mesh(
+      new THREE.BoxGeometry(1.0, 0.22, 0.44), matBattery
+    );
+    bat.position.set(0.4, -0.16, 0);
+    uav.add(bat);
+
+    // Battery cell separators
+    for (var j = 0; j < 5; j++) {
+      var cl = new THREE.Mesh(
+        new THREE.BoxGeometry(0.005, 0.23, 0.45),
+        new THREE.MeshPhongMaterial({ color: 0x0a1a0f, emissive: 0x005520, emissiveIntensity: 0.5 })
+      );
+      cl.position.set(0.05 + j * 0.2, -0.16, 0);
+      uav.add(cl);
+    }
+
+    var bGlow = new THREE.PointLight(0x00ff80, 2.5, 3.0);
+    bGlow.position.set(0.4, -0.3, 0);
+    uav.add(bGlow);
+    batGlow_ref = bGlow;
+
+    // ── FUEL TANK ──
+    var fuelTank = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.13, 0.5, 16), matFuel
+    );
+    fuelTank.rotation.z = Math.PI / 2;
+    fuelTank.position.set(-0.45, -0.13, 0);
+    uav.add(fuelTank);
+
+    var fGlow = new THREE.PointLight(0x8040ff, 1.5, 2.0);
+    fGlow.position.set(-0.45, -0.2, 0);
+    uav.add(fGlow);
+
+    // ── LANDING GEAR ──
+    var gearMat = new THREE.MeshPhongMaterial({ color: 0x404550, shininess: 30 });
+    [[- 0.3, -0.34, 0.2], [-0.3, -0.34, -0.2], [0.9, -0.34, 0]].forEach(function(p) {
+      var w = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.03, 8, 16), gearMat);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(p[0], p[1], p[2]);
+      uav.add(w);
+    });
+
+    uav.position.y = 0.2;
+    scene.add(uav);
+
+    // ── Hide loading status ──
+    status.classList.add('hidden');
+
+    // ── MOUSE ORBIT ──
+    var isDrag = false, px = 0, py = 0;
+    var rotY = -0.4, rotX = 0.12;
+    mount.addEventListener('mousedown', function(e) { isDrag = true; px = e.clientX; py = e.clientY; });
+    window.addEventListener('mouseup', function() { isDrag = false; });
+    window.addEventListener('mousemove', function(e) {
+      if (!isDrag) return;
+      rotY += (e.clientX - px) * 0.005; px = e.clientX;
+      rotX += (e.clientY - py) * 0.004; py = e.clientY;
+      rotX = Math.max(-0.6, Math.min(0.6, rotX));
+    });
+
+    // ── ANIMATE ──
+    var clock = new THREE.Clock();
+    (function loop() {
+      requestAnimationFrame(loop);
+      var t = clock.getElapsedTime();
+
+      if (!isDrag) rotY += 0.002;
+      var r = 8;
+      camera.position.x = r * Math.cos(rotY) * Math.cos(rotX);
+      camera.position.y = r * Math.sin(rotX) + 1.5;
+      camera.position.z = r * Math.sin(rotY) * Math.cos(rotX);
+      camera.lookAt(0, 0.1, 0);
+
+      // Spin props
+      if (propL_ref && propL_ref.userData.prop) propL_ref.userData.prop.rotation.x += propSpeed;
+      if (propR_ref && propR_ref.userData.prop) propR_ref.userData.prop.rotation.x += propSpeed;
+
+      // Pulse glows
+      if (engGlow_ref) engGlow_ref.intensity = 3.0 + 1.5 * Math.sin(t * 3);
+      if (batGlow_ref) batGlow_ref.intensity = 2.0 + 0.5 * Math.sin(t * 1.5 + 1);
+
+      // Float
+      uav.position.y = 0.2 + 0.03 * Math.sin(t * 0.5);
+
+      renderer.render(scene, camera);
+    })();
+
+    // ── RESIZE ──
+    window.addEventListener('resize', function() {
+      var w = mount.clientWidth;
+      var h = mount.clientHeight;
+      if (w < 50 || h < 50) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    console.log('3D UAV initialized: ' + W + 'x' + H + ' — ' + uav.children.length + ' objects');
+
+  } catch (err) {
+    status.textContent = '⚠ 3D Error: ' + err.message;
+    status.classList.add('error');
+    console.error('3D init failed:', err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('load', function() {
+  // 'load' fires AFTER all resources (including CDN scripts) are ready
+  setTimeout(function() {
+    init3D();
+    loadData();
+  }, 300);
+});
+</script>
+</body>
+</html>
+
+</script>
+</body>
+</html>
