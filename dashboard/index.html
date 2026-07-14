@@ -157,9 +157,9 @@ html, body {
 .panel-bottom {
   grid-column: 1 / -1; grid-row: 3;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: 1px;
-  padding: 0 14px 14px;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px;
   border-top: 1px solid rgba(255,255,255,0.04);
 }
 
@@ -194,18 +194,18 @@ html, body {
 .card[data-accent="amber"]   { border-left: 2px solid var(--amber); }
 
 .card-label {
-  font-family: var(--mono); font-size: 9px; font-weight: 400;
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
   letter-spacing: 2px; text-transform: uppercase;
-  color: var(--text-3); margin-bottom: 6px;
+  color: var(--text-2); margin-bottom: 6px;
 }
 .card-value {
-  font-family: var(--mono); font-size: 22px; font-weight: 300;
+  font-family: var(--mono); font-size: 26px; font-weight: 300;
   line-height: 1; color: var(--text-1);
 }
 .card-value .unit {
-  font-size: 11px; color: var(--text-3); margin-left: 3px; font-weight: 400;
+  font-size: 13px; color: var(--text-2); margin-left: 3px; font-weight: 400;
 }
-.card-sub { font-size: 10px; color: var(--text-3); margin-top: 4px; }
+.card-sub { font-size: 12px; color: var(--text-2); margin-top: 4px; }
 
 /* Mini sparkline */
 .sparkline { width: 100%; height: 36px; margin-top: 8px; }
@@ -225,13 +225,13 @@ html, body {
   margin-bottom: 6px;
 }
 .bchart-title {
-  font-family: var(--mono); font-size: 9px; letter-spacing: 2px;
-  text-transform: uppercase; color: var(--text-3);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--text-2); font-weight: 500;
 }
 .bchart-val {
-  font-family: var(--mono); font-size: 13px; color: var(--text-1);
+  font-family: var(--mono); font-size: 15px; color: var(--text-1);
 }
-.chart-wrap { height: 110px; position: relative; }
+.chart-wrap { height: 220px; position: relative; }
 .chart-wrap canvas { width: 100% !important; height: 100% !important; }
 
 /* ─── SOC BAR ─── */
@@ -262,15 +262,18 @@ html, body {
 }
 .p-leg-item {
   display: flex; align-items: center; gap: 4px;
-  font-family: var(--mono); font-size: 9px; color: var(--text-3);
+  font-family: var(--mono); font-size: 12px; color: var(--text-2); font-weight: 500;
 }
 .p-leg-dot { width: 6px; height: 6px; border-radius: 50%; }
 
 /* ─── CONTROLS OVERLAY ─── */
 .controls {
-  position: fixed; bottom: 236px; right: 294px; z-index: 50;
+  position: absolute; bottom: 16px; right: 16px; z-index: 50;
   display: flex; flex-direction: column; gap: 6px;
   align-items: flex-end;
+  background: rgba(8,12,20,0.75); padding: 16px;
+  border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);
+  backdrop-filter: blur(12px);
 }
 .ctrl-row {
   display: flex; align-items: center; gap: 10px;
@@ -410,6 +413,35 @@ html, body {
       <div class="ph descent" id="ph-descent">Descent</div>
       <div class="ph landing" id="ph-landing">Landing</div>
     </div>
+    
+    <!-- ─── CONTROLS ─── -->
+    <div class="controls">
+      <div class="ctrl-row">
+        <label>Battery</label>
+        <input type="range" id="sl-bat" min="20" max="80" step="5" value="55">
+        <div class="ctrl-val" id="cv-bat">55 kWh</div>
+      </div>
+      <div class="ctrl-row">
+        <label>Cruise</label>
+        <input type="range" id="sl-cruise" min="10" max="120" step="5" value="30">
+        <div class="ctrl-val" id="cv-cruise">30 min</div>
+      </div>
+      <div class="ctrl-row">
+        <label>Loiter</label>
+        <input type="range" id="sl-loiter" min="5" max="60" step="5" value="20">
+        <div class="ctrl-val" id="cv-loiter">20 min</div>
+      </div>
+      <div class="ctrl-row" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <label style="color: var(--teal);">Timeline</label>
+        <input type="range" id="sl-time" min="0" max="100" step="1" value="0" oninput="scrubTimeline(this.value)" style="width: 140px; height: 4px; background: rgba(45,212,191,0.2);">
+        <div class="ctrl-val" id="cv-time" style="color: var(--teal);">0s</div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 8px; width: 100%;">
+        <button class="btn-sim" id="btn-play" onclick="togglePlayback()" style="flex: 1;">⏸ Pause</button>
+        <button class="btn-sim" id="btn-sim" onclick="rerunSim()" style="flex: 1;">▶ Re-Simulate</button>
+      </div>
+    </div>
+    
   </div>
 
   <!-- RIGHT PANELS -->
@@ -438,22 +470,22 @@ html, body {
       <div class="card-value" id="v-eta-val">—<span class="unit">%</span></div>
       <div class="divider"></div>
       <div class="gauge-row">
-        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_engine</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-2);min-width:65px">η_engine</div>
         <div class="gauge-bar"><div class="gauge-fill" id="g-eng" style="width:35%;background:var(--copper)"></div></div>
         <div class="gauge-label" id="gl-eng">35%</div>
       </div>
       <div class="gauge-row">
-        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_gen</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-2);min-width:65px">η_gen</div>
         <div class="gauge-bar"><div class="gauge-fill" id="g-gen" style="width:95%;background:var(--amber)"></div></div>
         <div class="gauge-label" id="gl-gen">95%</div>
       </div>
       <div class="gauge-row">
-        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_motor</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-2);min-width:65px">η_motor</div>
         <div class="gauge-bar"><div class="gauge-fill" id="g-mot" style="width:93%;background:var(--blue)"></div></div>
         <div class="gauge-label" id="gl-mot">93%</div>
       </div>
       <div class="gauge-row">
-        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);min-width:56px">η_prop</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-2);min-width:65px">η_prop</div>
         <div class="gauge-bar"><div class="gauge-fill" id="g-prop" style="width:85%;background:var(--teal)"></div></div>
         <div class="gauge-label" id="gl-prop">85%</div>
       </div>
@@ -526,34 +558,16 @@ html, body {
   </div>
 </div>
 
-<!-- ─── CONTROLS ─── -->
-<div class="controls">
-  <div class="ctrl-row">
-    <label>Battery</label>
-    <input type="range" id="sl-bat" min="20" max="80" step="5" value="55">
-    <div class="ctrl-val" id="cv-bat">55 kWh</div>
-  </div>
-  <div class="ctrl-row">
-    <label>Cruise</label>
-    <input type="range" id="sl-cruise" min="10" max="120" step="5" value="30">
-    <div class="ctrl-val" id="cv-cruise">30 min</div>
-  </div>
-  <div class="ctrl-row">
-    <label>Loiter</label>
-    <input type="range" id="sl-loiter" min="5" max="60" step="5" value="20">
-    <div class="ctrl-val" id="cv-loiter">20 min</div>
-  </div>
-  <button class="btn-sim" id="btn-sim" onclick="rerunSim()">▶ Re-Simulate</button>
-</div>
+
 
 <script>
 // ═══════════════════════════════════════════════════════════
 // CHART GLOBAL DEFAULTS
 // ═══════════════════════════════════════════════════════════
-Chart.defaults.color = '#50505f';
-Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
+Chart.defaults.color = '#8a8a9a';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
 Chart.defaults.font.family = "'JetBrains Mono', monospace";
-Chart.defaults.font.size = 9;
+Chart.defaults.font.size = 11;
 Chart.defaults.animation.duration = 800;
 Chart.defaults.plugins.legend.display = false;
 
@@ -589,12 +603,52 @@ async function loadData() {
 // ═══════════════════════════════════════════════════════════
 // LIVE PLAYBACK — scrubs through mission over time
 // ═══════════════════════════════════════════════════════════
+let isPlaying = true;
+
+function togglePlayback() {
+  isPlaying = !isPlaying;
+  document.getElementById('btn-play').innerHTML = isPlaying ? '⏸ Pause' : '▶ Play';
+  if (isPlaying) {
+    if (simIdx >= simData.length) simIdx = 0;
+    startPlaybackLoop();
+  } else {
+    if (tickTimer) clearInterval(tickTimer);
+  }
+}
+
+function scrubTimeline(val) {
+  if (simData.length === 0) return;
+  simIdx = Math.floor((val / 100) * (simData.length - 1));
+  updateLiveReadouts(simData[simIdx]);
+  
+  let t_s = simData[simIdx].t_s;
+  document.getElementById('cv-time').textContent = (t_s/60).toFixed(1) + 'm';
+}
+
 function startPlayback() {
   simIdx = 0;
+  isPlaying = true;
+  document.getElementById('btn-play').innerHTML = '⏸ Pause';
+  startPlaybackLoop();
+}
+
+function startPlaybackLoop() {
   if (tickTimer) clearInterval(tickTimer);
   tickTimer = setInterval(() => {
-    if (simIdx >= simData.length) { simIdx = 0; return; }
+    if (simIdx >= simData.length) {
+      clearInterval(tickTimer);
+      isPlaying = false;
+      document.getElementById('btn-play').innerHTML = '▶ Play';
+      return; 
+    }
     updateLiveReadouts(simData[simIdx]);
+    
+    let pct = (simIdx / (simData.length - 1)) * 100;
+    document.getElementById('sl-time').value = pct;
+    
+    let t_s = simData[simIdx].t_s;
+    document.getElementById('cv-time').textContent = (t_s/60).toFixed(1) + 'm';
+    
     simIdx += 15; // advance 15 seconds per tick
   }, 150);
 }
@@ -802,8 +856,8 @@ function buildParetoChart() {
     options: {
       ...CHART_OPTS,
       scales: {
-        x: { ...CHART_OPTS.scales.x, title: { display: true, text: 'Fuel (kg)', color: '#50505f', font: { size: 8 } } },
-        y: { ...CHART_OPTS.scales.y, title: { display: true, text: 'Mass (kg)', color: '#50505f', font: { size: 8 } } }
+        x: { ...CHART_OPTS.scales.x, title: { display: true, text: 'Fuel (kg)', color: '#8a8a9a', font: { size: 12 } } },
+        y: { ...CHART_OPTS.scales.y, title: { display: true, text: 'Mass (kg)', color: '#8a8a9a', font: { size: 12 } } }
       }
     }
   });
