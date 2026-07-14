@@ -73,22 +73,6 @@ uav_hybrid_sim/
 
 ---
 
-## Engineering Workflow (8 Phases)
-
-| Phase | Title | Status |
-|-------|-------|--------|
-| **0** | Requirements Freeze & Assumption Framework | ✅ Complete |
-| **1** | Research & Engineering Assumptions | ⬜ Pending |
-| **2** | Mission Profile & Power Demand | ⬜ Pending |
-| **3** | Component Sizing | ⬜ Pending |
-| **4** | Hybrid Power-Sharing Strategies | ⬜ Pending |
-| **5** | Time-Stepped Simulation Engine | ⬜ Pending |
-| **6** | Design Optimization | ⬜ Pending |
-| **7** | Interactive Dashboard | ⬜ Pending |
-| **8** | Validation & Sensitivity Analysis | ⬜ Pending |
-
----
-
 ## Quick Start
 
 ```bash
