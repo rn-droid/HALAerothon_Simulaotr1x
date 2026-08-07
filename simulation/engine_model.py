@@ -20,9 +20,10 @@ class TurboshaftEngine:
       - Load tracking and thermal proxy
     """
     
-    def __init__(self, rated_power_W: float = None):
+    def __init__(self, rated_power_W: float = None, bsfc_scale: float = 1.0):
         self.rated_power_W = rated_power_W or ENGINE.rated_power_W
         self.rated_power_kW = self.rated_power_W / 1000.0
+        self.bsfc_scale = bsfc_scale
         
         # Build BSFC interpolation arrays
         self._pf = np.array(ENGINE.bsfc_table_pf, dtype=float)
@@ -41,7 +42,7 @@ class TurboshaftEngine:
         if power_fraction <= 0.0:
             return 0.0
         pf = np.clip(power_fraction, self._pf[0], self._pf[-1])
-        return float(np.interp(pf, self._pf, self._bsfc))
+        return float(np.interp(pf, self._pf, self._bsfc)) * self.bsfc_scale
     
     def get_thermal_efficiency(self, power_fraction: float) -> float:
         """

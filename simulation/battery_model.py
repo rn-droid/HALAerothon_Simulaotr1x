@@ -17,7 +17,7 @@ class BatteryPack:
     Features:
       - Coulomb-counting SoC integration
       - C-rate enforcement (continuous & peak)
-      - SoC window clamping [20%, 90%]
+      - SoC window clamping [20%, 100%]
       - Round-trip efficiency modelling (sqrt split)
       - Constraint violation flagging
     """
@@ -27,9 +27,9 @@ class BatteryPack:
         self.capacity_Wh = self.capacity_kWh * 1000.0
         self.capacity_J = self.capacity_Wh * 3600.0
         
-        self.soc = initial_soc if initial_soc is not None else BATTERY.soc_max
+        self.soc = min(1.0, initial_soc if initial_soc is not None else BATTERY.soc_max)
         self.soc_min = BATTERY.soc_min
-        self.soc_max = BATTERY.soc_max
+        self.soc_max = 1.0
         
         # Efficiency: split round-trip into discharge and charge
         self.eta_discharge = math.sqrt(BATTERY.round_trip_efficiency)  # ~0.9747

@@ -68,6 +68,8 @@ class AeroConfig:
     AR: float = 10.0                  # aspect ratio              [—]     AERO-02
     e0: float = 0.80                  # Oswald efficiency         [—]     AERO-03
     CD0: float = 0.025                # zero-lift drag coeff      [—]     AERO-04
+    CL_max: float = 1.5               # maximum lift coefficient  [—]     AERO-10
+    stall_margin: float = 1.20        # V_min / V_stall safety    [—]     AERO-11
     windmilling_CD: float = 0.015     # descent regen drag inc.   [—]     AERO-09
 
     @property

@@ -6,3 +6,4 @@ pymoo
 dash
 plotly
 pytest
+flask
