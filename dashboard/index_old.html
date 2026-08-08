@@ -1,0 +1,2216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UAV-HE1 Propulsion System — Engineering Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ─── RESET & BASE ─── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --black:       #04050a;
+  --black2:      #080c14;
+  --panel-bg:    rgba(8, 12, 20, 0.72);
+  --panel-border:rgba(255,255,255,0.05);
+  --panel-glow:  rgba(255, 160, 80, 0.08);
+  --copper:      #c87941;
+  --copper-light:#e8a060;
+  --amber:       #f5a623;
+  --teal:        #2dd4bf;
+  --teal-dim:    rgba(45,212,191,0.15);
+  --green:       #10d48e;
+  --green-dim:   rgba(16,212,142,0.12);
+  --red:         #e84040;
+  --red-dim:     rgba(232,64,64,0.12);
+  --purple:      #8b6cf7;
+  --purple-dim:  rgba(139,108,247,0.12);
+  --blue:        #3b9eff;
+  --blue-dim:    rgba(59,158,255,0.12);
+  --text-1:      #f0ece6;
+  --text-2:      #8a8a9a;
+  --text-3:      #50505f;
+  --mono:        'JetBrains Mono', monospace;
+  --sans:        'Inter', system-ui, sans-serif;
+}
+
+html, body {
+  width: 100%; min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--black);
+  font-family: var(--sans);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── TOP BAR ─── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  min-height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px;
+  background: linear-gradient(180deg, rgba(4,5,10,0.98) 0%, rgba(4,5,10,0) 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.brand {
+  font-size: 13px; font-weight: 600; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--text-1);
+}
+.brand span { color: var(--copper); }
+.sep { width: 1px; height: 18px; background: var(--panel-border); }
+.designation {
+  font-family: var(--mono); font-size: 10px; color: var(--text-3);
+  letter-spacing: 1px;
+}
+.topbar-pills { display: flex; gap: 10px; }
+.pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  font-family: var(--mono); font-size: 10px; color: var(--text-2);
+}
+.pill .val { color: var(--copper-light); font-weight: 500; }
+.status-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ─── MAIN CANVAS LAYOUT ─── */
+.scene {
+  width: 100%; min-height: 100vh;
+  display: grid;
+  grid-template-columns: 340px 1fr 360px;
+  grid-template-rows: 52px minmax(500px, 1fr) auto;
+  gap: 0;
+}
+
+/* ─── 3D HERO CENTER ─── */
+.hero {
+  grid-column: 2; grid-row: 2;
+  position: relative;
+  overflow: hidden;
+  background: #04050a;
+}
+#three-mount {
+  position: absolute; top: 0; left: 0; right: 0; height: 29%;
+  cursor: grab;
+}
+#three-mount:active { cursor: grabbing; }
+#three-mount canvas {
+  display: block; /* Three.js creates its own canvas */
+}
+.hero-status {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text-3); z-index: 5;
+  text-align: center; pointer-events: none;
+}
+.hero-status.error { color: var(--red); }
+.hero-status.hidden { display: none; }
+
+/* Phase label overlay */
+.phase-overlay {
+  position: absolute; top: calc(29% - 36px); left: 50%; transform: translateX(-50%);
+  z-index: 10;
+  display: flex; gap: 8px;
+}
+.ph {
+  padding: 4px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: 9px; font-weight: 500;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  border: 1px solid;
+  opacity: 0.5; transition: all 0.3s;
+}
+.ph.active { opacity: 1; }
+.ph.takeoff { border-color: var(--red); color: var(--red); }
+.ph.climb   { border-color: var(--amber); color: var(--amber); }
+.ph.cruise  { border-color: var(--blue); color: var(--blue); }
+.ph.loiter  { border-color: var(--purple); color: var(--purple); }
+.ph.descent { border-color: var(--green); color: var(--green); }
+.ph.landing { border-color: var(--text-3); color: var(--text-3); }
+
+.propulsion-board {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  top: 31%;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 10px;
+  z-index: 12;
+  overflow-y: auto;
+}
+.arch-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.arch-title strong { color: var(--teal); font-weight: 500; }
+.phase-rule {
+  display: grid;
+  grid-template-columns: 112px 1fr 152px;
+  gap: 8px;
+  align-items: stretch;
+}
+.phase-rule-item {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.03);
+  padding: 8px 10px;
+}
+.phase-rule-item span {
+  display: block;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.phase-rule-item strong {
+  display: block;
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+.phase-rule-item p {
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.architecture-diagram {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 10px;
+  min-height: 220px;
+}
+.flow-lanes {
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.flow-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(78px, 1fr));
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+.flow-row::before {
+  position: absolute;
+  left: 0;
+  top: -3px;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.flow-row.series-row::before { content: "Series path"; }
+.flow-row.parallel-row::before { content: "Parallel path"; }
+.flow-row.storage-row::before { content: "Storage + recovery"; }
+.flow-row.series-row { padding-top: 10px; }
+.flow-row.parallel-row { padding-top: 10px; }
+.flow-row.storage-row { padding-top: 10px; }
+.flow-row.parallel-row .arch-node:nth-child(2)::after,
+.flow-row.parallel-row .arch-node:nth-child(3)::after,
+.flow-row.storage-row .arch-node:nth-child(2)::after,
+.flow-row.storage-row .arch-node:nth-child(4)::after {
+  width: calc(100% + 8px);
+}
+.arch-node {
+  min-height: 62px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  background: rgba(8,12,20,0.76);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px;
+  position: relative;
+}
+.arch-node::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -11px;
+  width: 14px;
+  height: 2px;
+  background: rgba(255,255,255,0.14);
+}
+.flow-row .arch-node:last-child::after { display: none; }
+.arch-node.active {
+  border-color: rgba(45,212,191,0.5);
+  box-shadow: 0 0 18px rgba(45,212,191,0.12);
+}
+.arch-node.active::after {
+  background: linear-gradient(90deg, var(--teal), rgba(45,212,191,0.18));
+  box-shadow: 0 0 10px rgba(45,212,191,0.25);
+}
+.arch-node.recover {
+  border-color: rgba(16,212,142,0.5);
+  box-shadow: 0 0 18px rgba(16,212,142,0.12);
+}
+.arch-node.recover::after {
+  background: linear-gradient(90deg, var(--green), rgba(16,212,142,0.18));
+}
+.arch-node.idle {
+  opacity: 0.34;
+}
+.arch-node span {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-3);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.arch-node strong {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-1);
+  font-weight: 400;
+}
+.arch-node small {
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.25;
+}
+.control-stack {
+  display: grid;
+  gap: 8px;
+}
+.control-card {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  background: rgba(8,12,20,0.62);
+  padding: 10px;
+}
+.control-card span {
+  display: block;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.control-card strong {
+  display: block;
+  color: var(--copper-light);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+.control-card p {
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.logic-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.logic-tile {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  background: rgba(8,12,20,0.62);
+  padding: 9px;
+  min-height: 72px;
+}
+.logic-tile span {
+  display: block;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.logic-tile strong {
+  display: block;
+  color: var(--copper-light);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+.logic-tile p {
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+/* ─── SIDE PANELS ─── */
+.panel-left {
+  grid-column: 1; grid-row: 2;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 64px 14px 12px;
+  overflow-y: auto;
+}
+.panel-right {
+  grid-column: 3; grid-row: 2;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 64px 14px 12px;
+  overflow-y: auto;
+}
+
+/* ─── BOTTOM PANELS ─── */
+.panel-bottom {
+  grid-column: 1 / -1; grid-row: 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+/* ─── CARD ─── */
+.card {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 14px;
+  backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--panel-glow);
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.3s;
+}
+.card:hover::before { opacity: 1; }
+
+/* Card accent bar */
+.card[data-accent="copper"]  { border-left: 2px solid var(--copper); }
+.card[data-accent="teal"]    { border-left: 2px solid var(--teal); }
+.card[data-accent="green"]   { border-left: 2px solid var(--green); }
+.card[data-accent="red"]     { border-left: 2px solid var(--red); }
+.card[data-accent="purple"]  { border-left: 2px solid var(--purple); }
+.card[data-accent="blue"]    { border-left: 2px solid var(--blue); }
+.card[data-accent="amber"]   { border-left: 2px solid var(--amber); }
+
+.card-label {
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-2); margin-bottom: 6px;
+}
+.card-value {
+  font-family: var(--mono); font-size: 26px; font-weight: 300;
+  line-height: 1; color: var(--text-1);
+}
+.card-value .unit {
+  font-size: 13px; color: var(--text-2); margin-left: 3px; font-weight: 400;
+}
+.card-sub { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+
+/* Mini sparkline */
+.sparkline { width: 100%; height: 36px; margin-top: 8px; }
+.sparkline canvas { width: 100% !important; height: 36px !important; }
+
+/* ─── BOTTOM CHART CARDS ─── */
+.bchart {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+.bchart-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 6px;
+}
+.bchart-title {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--text-2); font-weight: 500;
+}
+.bchart-val {
+  font-family: var(--mono); font-size: 15px; color: var(--text-1);
+}
+.chart-wrap { height: 220px; position: relative; }
+.chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+/* ─── SOC BAR ─── */
+.soc-bar-wrap { margin-top: 8px; }
+.soc-track {
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.06); position: relative;
+}
+.soc-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--red) 0%, var(--amber) 40%, var(--green) 80%);
+  transition: width 0.8s ease;
+}
+.soc-limits {
+  display: flex; justify-content: space-between;
+  margin-top: 3px; font-family: var(--mono); font-size: 8px; color: var(--text-3);
+}
+
+/* ─── DIVIDER ─── */
+.divider {
+  height: 1px; background: var(--panel-border);
+  margin: 8px 0;
+}
+
+/* ─── PARETO MINI ─── */
+.pareto-legend {
+  display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;
+}
+.p-leg-item {
+  display: flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 12px; color: var(--text-2); font-weight: 500;
+}
+.p-leg-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* ─── CONTROLS OVERLAY ─── */
+.controls {
+  position: absolute; top: 16px; right: 16px; z-index: 50;
+  display: flex; flex-direction: column; gap: 6px;
+  align-items: stretch;
+  background: rgba(8,12,20,0.75); padding: 16px;
+  border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);
+  backdrop-filter: blur(12px);
+  width: min(390px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+}
+.ctrl-row {
+  display: grid; align-items: center; gap: 10px;
+  grid-template-columns: 74px minmax(90px, 1fr) 56px;
+}
+.ctrl-row label {
+  font-family: var(--mono); font-size: 9px; color: var(--text-3);
+  letter-spacing: 1px; text-transform: uppercase; text-align: right;
+}
+.ctrl-row input[type="range"] {
+  -webkit-appearance: none; width: 100%; height: 2px;
+  background: rgba(255,255,255,0.1); border-radius: 1px; outline: none; cursor: pointer;
+}
+.ctrl-row select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 10px;
+  outline: none;
+}
+.ctrl-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--copper); border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 0 8px rgba(200,121,65,0.6);
+}
+.ctrl-val {
+  font-family: var(--mono); font-size: 9px; color: var(--copper-light);
+  min-width: 48px;
+}
+.btn-sim {
+  margin-top: 4px;
+  padding: 6px 16px; border-radius: 4px; border: 1px solid var(--copper);
+  background: rgba(200,121,65,0.1); color: var(--copper-light);
+  font-family: var(--mono); font-size: 9px; letter-spacing: 1px;
+  text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-sim:hover { background: rgba(200,121,65,0.2); box-shadow: 0 0 16px rgba(200,121,65,0.2); }
+.btn-sim.loading { opacity: 0.4; pointer-events: none; }
+.param-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.tab-btn {
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.tab-btn.active {
+  color: var(--teal);
+  border-color: rgba(45,212,191,0.35);
+  background: rgba(45,212,191,0.08);
+}
+.param-group { display: none; }
+.param-group.active { display: block; }
+.mission-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.mission-row label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.mission-row input,
+.mission-row select {
+  width: 100%;
+  height: 30px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 8px;
+  outline: none;
+}
+.mission-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--teal);
+}
+.output-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+.metric-tile {
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  padding: 9px;
+}
+.metric-tile span {
+  display: block;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.metric-tile strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 400;
+}
+.phase-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+.phase-table th,
+.phase-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: right;
+}
+.phase-table th:first-child,
+.phase-table td:first-child { text-align: left; }
+.opt-result {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(45,212,191,0.18);
+  background: rgba(45,212,191,0.06);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.opt-result strong { color: var(--teal); font-weight: 500; }
+
+/* ─── ENDURANCE RING ─── */
+.endo-wrap { text-align: center; padding: 4px 0; }
+.endo-ring { position: relative; display: inline-block; width: 72px; height: 72px; }
+.endo-ring svg { width: 72px; height: 72px; transform: rotate(-90deg); }
+.endo-ring circle { fill: none; stroke-width: 3; }
+.endo-bg { stroke: rgba(255,255,255,0.06); }
+.endo-fg { stroke: var(--green); stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+.endo-text {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.endo-num {
+  font-family: var(--mono); font-size: 18px; font-weight: 300; line-height: 1;
+}
+.endo-unit { font-family: var(--mono); font-size: 8px; color: var(--text-3); margin-top: 1px; }
+
+/* ─── EFFICIENCY GAUGE ─── */
+.gauge-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.gauge-bar {
+  flex: 1; height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.06); position: relative;
+}
+.gauge-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.8s ease;
+}
+.gauge-label {
+  font-family: var(--mono); font-size: 9px; color: var(--text-3);
+  min-width: 28px; text-align: right;
+}
+
+/* ─── SCROLLBAR HIDE ─── */
+::-webkit-scrollbar { display: none; }
+
+@media (max-width: 1180px) {
+  .scene {
+    grid-template-columns: 300px 1fr 320px;
+  }
+  .topbar {
+    gap: 14px;
+    padding: 8px 16px;
+    flex-wrap: wrap;
+  }
+  .topbar-pills {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .architecture-diagram {
+    grid-template-columns: 1fr;
+  }
+  .control-stack {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .scene {
+    display: flex;
+    flex-direction: column;
+    padding-top: 72px;
+  }
+  .hero {
+    min-height: 560px;
+    order: 1;
+  }
+  .panel-left,
+  .panel-right {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 12px;
+    order: 2;
+  }
+  .panel-bottom {
+    grid-template-columns: 1fr;
+    order: 3;
+  }
+}
+
+@media (max-width: 620px) {
+  .brand { letter-spacing: 2px; }
+  .designation { display: none; }
+  .topbar-pills .pill:nth-child(n+4) { display: none; }
+  .hero { min-height: 620px; }
+  .controls {
+    left: 12px;
+    right: 12px;
+    top: 12px;
+    width: auto;
+  }
+  .phase-overlay {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .panel-left,
+  .panel-right {
+    grid-template-columns: 1fr;
+  }
+  .phase-rule {
+    grid-template-columns: 1fr;
+  }
+  .flow-row {
+    grid-template-columns: 1fr;
+  }
+  .arch-node::after {
+    display: none;
+  }
+  .control-stack,
+  .logic-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ─── TOP BAR ─── -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="brand">UAV<span>—HE1</span></div>
+    <div class="sep"></div>
+    <div class="designation">HYBRID-ELECTRIC PROPULSION SYSTEM / DIGITAL TWIN v7.0</div>
+  </div>
+  <div class="topbar-pills">
+    <div class="pill"><span class="status-dot"></span>LIVE SIM</div>
+    <div class="pill">MTOW <span class="val" id="p-mtow">1000 kg</span></div>
+    <div class="pill">ENGINE <span class="val" id="p-eng">60 kW</span></div>
+    <div class="pill">BATTERY <span class="val" id="p-bat">40 kWh</span></div>
+    <div class="pill">η <span class="val" id="p-eta">—</span></div>
+  </div>
+</div>
+
+<!-- ─── MAIN SCENE ─── -->
+<div class="scene">
+
+  <!-- LEFT PANELS -->
+  <div class="panel-left">
+
+    <div class="card" data-accent="teal">
+      <div class="card-label">Parameters</div>
+      <div class="param-tabs">
+        <button class="tab-btn active" id="tab-physical" onclick="showParamTab('physical')">Physical</button>
+        <button class="tab-btn" id="tab-natural" onclick="showParamTab('natural')">Natural</button>
+      </div>
+
+      <div class="param-group active" id="params-physical">
+        <div class="ctrl-row"><label>Mission</label><select id="sl-mission" onchange="setMissionProfile(this.value)"><option value="MISSION1">Mission 1</option><option value="ISR">ISR</option><option value="MAPPING">Mapping</option><option value="CARGO">Cargo</option><option value="ENDURANCE">Endurance</option></select><div class="ctrl-val" id="cv-mission">Mission 1</div></div>
+        <div class="ctrl-row"><label>MTOW</label><input type="range" id="sl-mtow" min="800" max="1300" step="25" value="1000"><div class="ctrl-val" id="cv-mtow">1000 kg</div></div>
+        <div class="ctrl-row"><label>Payload</label><input type="range" id="sl-payload" min="50" max="300" step="10" value="200"><div class="ctrl-val" id="cv-payload">200 kg</div></div>
+        <div class="ctrl-row"><label>Wing Area</label><input type="range" id="sl-wing-area" min="14" max="30" step="0.5" value="25"><div class="ctrl-val" id="cv-wing-area">25.0 m2</div></div>
+        <div class="ctrl-row"><label>Aspect</label><input type="range" id="sl-ar" min="8" max="18" step="0.25" value="15"><div class="ctrl-val" id="cv-ar">15.00</div></div>
+        <div class="ctrl-row"><label>CD0</label><input type="range" id="sl-cd0" min="0.018" max="0.045" step="0.001" value="0.023"><div class="ctrl-val" id="cv-cd0">0.023</div></div>
+        <div class="ctrl-row"><label>Engine</label><input type="range" id="sl-engine" min="40" max="95" step="5" value="60"><div class="ctrl-val" id="cv-engine">60 kW</div></div>
+        <div class="ctrl-row"><label>Battery</label><input type="range" id="sl-bat" min="20" max="90" step="5" value="40"><div class="ctrl-val" id="cv-bat">40 kWh</div></div>
+        <div class="ctrl-row"><label>Supercap</label><input type="range" id="sl-supercap" min="0.25" max="4" step="0.25" value="0.25"><div class="ctrl-val" id="cv-supercap">0.25 kWh</div></div>
+        <div class="ctrl-row"><label>Speed</label><input type="range" id="sl-speed" min="45" max="85" step="1" value="69"><div class="ctrl-val" id="cv-speed">69 m/s</div></div>
+        <div class="ctrl-row"><label>Altitude</label><input type="range" id="sl-alt" min="3000" max="10000" step="250" value="3000"><div class="ctrl-val" id="cv-alt">3000 m</div></div>
+      </div>
+
+      <div class="param-group" id="params-natural">
+        <div class="ctrl-row"><label>Wind</label><input type="range" id="sl-wind" min="-20" max="30" step="1" value="0"><div class="ctrl-val" id="cv-wind">0 m/s</div></div>
+        <div class="ctrl-row"><label>Gust</label><input type="range" id="sl-gust" min="0" max="20" step="1" value="0"><div class="ctrl-val" id="cv-gust">0 m/s</div></div>
+        <div class="ctrl-row"><label>Temp Δ</label><input type="range" id="sl-temp" min="-25" max="35" step="1" value="0"><div class="ctrl-val" id="cv-temp">0 C</div></div>
+        <div class="ctrl-row"><label>Humidity</label><input type="range" id="sl-humidity" min="0" max="100" step="5" value="45"><div class="ctrl-val" id="cv-humidity">45 %</div></div>
+        <div class="ctrl-row"><label>Rain</label><input type="range" id="sl-rain" min="0" max="20" step="1" value="0"><div class="ctrl-val" id="cv-rain">0 mm/h</div></div>
+        <div class="ctrl-row"><label>Dust</label><input type="range" id="sl-dust" min="0" max="5" step="0.5" value="0"><div class="ctrl-val" id="cv-dust">0.0</div></div>
+      </div>
+    </div>
+
+    <div class="card" data-accent="blue">
+      <div class="card-label">Live Aircraft State</div>
+      <div class="output-grid">
+        <div class="metric-tile"><span>Altitude</span><strong id="v-alt">5000 m</strong></div>
+        <div class="metric-tile"><span>Airspeed</span><strong id="v-spd">69 m/s</strong></div>
+        <div class="metric-tile"><span>Engine</span><strong id="v-eng-pw">60 kW</strong></div>
+        <div class="metric-tile"><span>Fuel</span><strong id="v-fuel-rem">80 kg</strong></div>
+      </div>
+      <div class="card-sub" id="v-bsfc">60 kW turboshaft BSFC model active</div>
+      <div class="card-sub" id="v-fuel-burn">Burned: 0.0 kg</div>
+    </div>
+
+  </div>
+
+  <!-- CENTER HERO -->
+  <div class="hero">
+    <div id="three-mount"></div>
+    <div class="hero-status" id="hero-status">Loading 3D model…</div>
+    <div class="phase-overlay">
+      <div class="ph takeoff" id="ph-takeoff">Takeoff</div>
+      <div class="ph climb" id="ph-climb">Climb</div>
+      <div class="ph cruise active" id="ph-cruise">Cruise</div>
+      <div class="ph loiter" id="ph-loiter">Loiter</div>
+      <div class="ph descent" id="ph-descent">Descent</div>
+      <div class="ph landing" id="ph-landing">Landing</div>
+    </div>
+    <div class="propulsion-board">
+      <div class="arch-title">
+        <div>Hybrid Propulsion Architecture · <strong id="arch-mode-label">Series-Parallel Ready</strong></div>
+        <div id="arch-clutch-label">Clutch: MODULATING</div>
+      </div>
+      <div class="phase-rule">
+        <div class="phase-rule-item"><span>Mission phase</span><strong id="phase-mode">Cruise</strong></div>
+        <div class="phase-rule-item"><span>Selected logic</span><p id="phase-logic">Series-parallel controller compares demand, SoC reserve, and efficient turboshaft operating region.</p></div>
+        <div class="phase-rule-item"><span>Architecture</span><strong id="phase-architecture">Series-Parallel</strong></div>
+      </div>
+      <div class="architecture-diagram">
+        <div class="flow-lanes">
+          <div class="flow-row series-row">
+            <div class="arch-node active" id="node-engine"><span>Source</span><strong>Turboshaft</strong><small id="node-engine-val">60 kW BSFC map</small></div>
+            <div class="arch-node active" id="node-generator"><span>Series</span><strong>Generator</strong><small id="node-generator-val">Engine to DC</small></div>
+            <div class="arch-node active" id="node-dcbus"><span>Electrical</span><strong>DC Bus</strong><small id="node-dcbus-val">Power split point</small></div>
+            <div class="arch-node active" id="node-motor"><span>Drive / regen</span><strong>Motor</strong><small id="node-motor-val">Propulsion</small></div>
+            <div class="arch-node active" id="node-prop"><span>Output</span><strong>Propeller</strong><small id="node-prop-val">Shaft power</small></div>
+          </div>
+          <div class="flow-row parallel-row">
+            <div class="arch-node active" id="node-par-engine"><span>Direct source</span><strong>Engine</strong><small id="node-par-engine-val">Mechanical shaft</small></div>
+            <div class="arch-node active" id="node-clutch"><span>Mechanical</span><strong>Clutch</strong><small id="node-clutch-val">Lock / open</small></div>
+            <div class="arch-node active" id="node-gearbox"><span>Combiner</span><strong>Gearbox</strong><small id="node-gearbox-val">Engine + motor</small></div>
+            <div class="arch-node active" id="node-par-motor"><span>Assist</span><strong>Motor</strong><small id="node-par-motor-val">Peak assist</small></div>
+            <div class="arch-node active" id="node-par-prop"><span>Parallel output</span><strong>Propeller</strong><small id="node-par-prop-val">Direct drive</small></div>
+          </div>
+          <div class="flow-row storage-row">
+            <div class="arch-node active" id="node-battery"><span>Continuous</span><strong>Battery</strong><small id="node-battery-val">Cruise energy</small></div>
+            <div class="arch-node active" id="node-supercap"><span>Peak buffer</span><strong>Supercap</strong><small id="node-supercap-val">Takeoff / climb</small></div>
+            <div class="arch-node active" id="node-storage"><span>Control</span><strong>Adaptive ECMS</strong><small id="node-storage-val">SoC tracking</small></div>
+            <div class="arch-node active" id="node-regen"><span>Descent</span><strong>Regen</strong><small id="node-regen-val">Windmill recovery</small></div>
+            <div class="arch-node active" id="node-soc"><span>Limit</span><strong>SoC Window</strong><small id="node-soc-val">20-100%</small></div>
+          </div>
+        </div>
+        <div class="control-stack">
+          <div class="control-card"><span>Adaptive / Fuzzy ECMS</span><strong id="control-ecms">SoC sustaining</strong><p id="control-ecms-text">Raises equivalence factor when SoC falls below target, commanding more engine power; relaxes it when battery reserve is high.</p></div>
+          <div class="control-card"><span>Battery-Supercap Split</span><strong id="control-storage">Peak shaving</strong><p id="control-storage-text">Supercapacitor supplies takeoff and climb transients; battery provides continuous cruise and loiter energy.</p></div>
+          <div class="control-card"><span>Regenerative Descent</span><strong id="control-regen">Drag-limited</strong><p id="control-regen-text">Windmilling propeller back-drives the motor as a generator, with recovery capped by aerodynamic losses and battery charge acceptance.</p></div>
+        </div>
+      </div>
+      <div class="logic-grid">
+        <div class="logic-tile"><span>Series</span><strong>Engine → Generator → Motor → Propeller</strong><p>Used for climb, loiter support, charging, and flexible control when SoC or power demand changes.</p></div>
+        <div class="logic-tile"><span>Parallel</span><strong>Engine + Motor → Propeller</strong><p>Used in efficient cruise when the clutch locks and direct shaft drive avoids generator/motor conversion losses.</p></div>
+        <div class="logic-tile"><span>Series-Parallel</span><strong id="logic-arch">Clutch switching</strong><p id="logic-clutch">Switches between both modes for efficient cruise and flexible climb/loiter control.</p></div>
+        <div class="logic-tile"><span>Research Gap</span><strong>Unified Framework</strong><p>Integrates adaptive ECMS, iterative mass sizing, regenerative descent, supercap buffering, and NSGA-II optimization.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANELS -->
+  <div class="panel-right">
+
+    <div class="card" data-accent="amber">
+      <div class="card-label">Mission</div>
+      <button class="btn-sim" id="btn-show-mission" onclick="toggleMissionPanel()" style="width:100%;margin-bottom:10px;">Mission</button>
+      <div id="mission-panel">
+        <div class="mission-row"><label>Takeoff</label><input type="checkbox" id="mission-takeoff" checked></div>
+        <div class="mission-row"><label>Climb Time</label><input id="mission-climb-time" type="number" min="0" step="0.5" placeholder="auto"></div>
+        <div class="mission-row"><label>Climb Dist</label><input id="mission-climb-dist" type="number" min="0" step="0.5" placeholder="km optional"></div>
+        <div class="mission-row"><label>Climb Rate</label><input id="mission-climb-rate" type="number" min="1" step="0.5" value="3"></div>
+        <div class="mission-row"><label>Cruise Time</label><input id="mission-cruise-time" type="number" min="0" step="1" value="15"></div>
+        <div class="mission-row"><label>Cruise Dist</label><input id="mission-cruise-dist" type="number" min="0" step="1" placeholder="km optional"></div>
+        <div class="mission-row"><label>Loiter Time</label><input id="mission-loiter-time" type="number" min="0" step="1" value="30"></div>
+        <div class="mission-row"><label>Descent</label><input type="checkbox" id="mission-descent" checked></div>
+        <div class="mission-row"><label>Initial SoC</label><input id="mission-soc" type="number" min="20" max="100" step="1" value="90"></div>
+        <div class="mission-row"><label>Fuel Start</label><input id="mission-fuel" type="number" min="0" step="1" value="64"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn-sim" id="btn-play" onclick="togglePlayback()" style="flex:1;">Pause</button>
+          <button class="btn-sim" id="btn-sim" onclick="rerunSim()" style="flex:1;">Enter & Simulate Mission</button>
+        </div>
+        <button class="btn-sim" onclick="startMission1()" style="width:100%;">Start Mission 1</button>
+        <button class="btn-sim" id="btn-mission" onclick="runMissionOptimization()" style="width:100%;">Improve Design</button>
+      </div>
+      <div class="ctrl-row" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">
+        <label style="color:var(--teal);">Timeline</label>
+        <input type="range" id="sl-time" min="0" max="100" step="1" value="0" oninput="scrubTimeline(this.value)">
+        <div class="ctrl-val" id="cv-time" style="color:var(--teal);">0s</div>
+      </div>
+    </div>
+
+    <div class="card" data-accent="green">
+      <div class="card-label">Required Outputs</div>
+      <div class="output-grid">
+        <div class="metric-tile"><span>Status</span><strong id="out-status">Ready</strong></div>
+        <div class="metric-tile"><span>Mission</span><strong id="out-time">—</strong></div>
+        <div class="metric-tile"><span>Fuel Burn</span><strong id="out-fuel">—</strong></div>
+        <div class="metric-tile"><span>Final SoC</span><strong id="out-soc">—</strong></div>
+        <div class="metric-tile"><span>Max Power</span><strong id="out-max-power">—</strong></div>
+        <div class="metric-tile"><span>Mass Margin</span><strong id="out-mass">—</strong></div>
+        <div class="metric-tile"><span>Stall Margin</span><strong id="out-stall">—</strong></div>
+        <div class="metric-tile"><span>Range</span><strong id="out-range">—</strong></div>
+        <div class="metric-tile"><span>Engine Gap</span><strong id="out-gap">—</strong></div>
+      </div>
+      <div class="opt-result" id="opt-result">
+        <strong>PDS ready</strong><br>
+        Blank initial battery and fuel fields run as 100% charged and full tank.
+      </div>
+    </div>
+
+    <div class="card" data-accent="blue">
+      <div class="card-label">Live Powertrain</div>
+      <div class="output-grid">
+        <div class="metric-tile"><span>Battery SoC</span><strong id="v-soc">100%</strong></div>
+        <div class="metric-tile"><span>Motor</span><strong id="v-motor">— kW</strong></div>
+        <div class="metric-tile"><span>Generator</span><strong id="v-gen">— kW</strong></div>
+        <div class="metric-tile"><span>Efficiency</span><strong id="v-eta-val">—</strong></div>
+      </div>
+      <div class="card-sub" id="v-crate">C-rate: —</div>
+      <div class="card-sub" id="v-rpm">RPM: — · Torque: — Nm</div>
+      <div class="soc-bar-wrap"><div class="soc-track"><div class="soc-fill" id="soc-bar" style="width:100%"></div></div><div class="soc-limits"><span>20%</span><span>100%</span></div></div>
+      <div class="soc-bar-wrap"><div class="soc-track"><div class="soc-fill" id="fuel-bar" style="width:100%;background:linear-gradient(90deg,#8b6cf7,#c87941)"></div></div><div class="soc-limits"><span>0</span><span>fuel</span></div></div>
+    </div>
+
+    <div class="card" data-accent="purple">
+      <div class="card-label">Phase Outputs</div>
+      <table class="phase-table" id="phase-table">
+        <thead><tr><th>Phase</th><th>min</th><th>Req</th><th>Eng</th><th>Bat</th><th>SoC</th></tr></thead>
+        <tbody><tr><td colspan="6">Run a mission to populate phase metrics.</td></tr></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM CHARTS -->
+  <div class="panel-bottom">
+
+    <!-- Power Distribution -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">Power Split</div>
+        <div class="bchart-val" id="bv-power">— kW</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-power"></canvas></div>
+    </div>
+
+    <!-- Battery SoC Trajectory -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">SoC Trajectory</div>
+        <div class="bchart-val" id="bv-soc">— %</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-soc"></canvas></div>
+    </div>
+
+    <!-- Fuel Burn -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">Fuel Consumed</div>
+        <div class="bchart-val" id="bv-fuel">— kg</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-fuel"></canvas></div>
+    </div>
+
+    <!-- Design Pareto -->
+    <div class="bchart">
+      <div class="bchart-header">
+        <div class="bchart-title">Design Space</div>
+        <div class="bchart-val" style="color:var(--copper)">★ Opt Config</div>
+      </div>
+      <div class="chart-wrap"><canvas id="ch-pareto"></canvas></div>
+      <div class="pareto-legend">
+        <div class="p-leg-item"><div class="p-leg-dot" style="background:var(--teal)"></div>Twin</div>
+        <div class="p-leg-item"><div class="p-leg-dot" style="background:var(--amber)"></div>Single</div>
+        <div class="p-leg-item"><div class="p-leg-dot" style="background:var(--copper);width:8px;height:8px"></div>Recommended</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CHART GLOBAL DEFAULTS
+// ═══════════════════════════════════════════════════════════
+if (typeof Chart === 'undefined') {
+  window.Chart = class {
+    static defaults = { plugins: { legend: {} }, animation: {}, font: {} };
+    constructor(ctx) {
+      this.ctx = ctx;
+      if (ctx) {
+        const parent = ctx.parentElement;
+        const fallback = document.createElement('div');
+        fallback.style.cssText = 'height:100%;display:flex;align-items:center;justify-content:center;color:#8a8a9a;font-family:JetBrains Mono,monospace;font-size:11px;text-align:center;';
+        fallback.textContent = 'Chart library unavailable. Run simulation controls still work.';
+        ctx.style.display = 'none';
+        if (parent && !parent.querySelector('.chart-fallback')) {
+          fallback.className = 'chart-fallback';
+          parent.appendChild(fallback);
+        }
+      }
+    }
+    destroy() {}
+  };
+}
+Chart.defaults.color = '#8a8a9a';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 11;
+Chart.defaults.animation.duration = 800;
+Chart.defaults.plugins.legend.display = false;
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL STATE
+// ═══════════════════════════════════════════════════════════
+let simData = [];
+let sweepData = [];
+let charts = {};
+let simIdx = 0;
+let tickTimer = null;
+let selectedMission = 'MISSION1';
+let flightState = {
+  phase: 'CRUISE',
+  airspeed: 52,
+  altitude: 5000,
+  powerKW: 45,
+  progress: 0,
+  mission: 'MISSION1'
+};
+let activeFuelStartKg = 80;
+
+// ═══════════════════════════════════════════════════════════
+// DATA LOAD
+// ═══════════════════════════════════════════════════════════
+async function loadData() {
+  try {
+    const [ts, sw] = await Promise.all([
+      fetch('/api/data/timeseries').then(r => r.json()),
+      fetch('/api/data/sweep').then(r => r.json())
+    ]);
+    simData = ts;
+    sweepData = sw;
+  } catch(e) {
+    console.warn('API unreachable, using empty data');
+    simData = [];
+    sweepData = [];
+  }
+  buildCharts();
+  if (simData.length > 0) startPlayback();
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIVE PLAYBACK — scrubs through mission over time
+// ═══════════════════════════════════════════════════════════
+let isPlaying = true;
+
+function togglePlayback() {
+  isPlaying = !isPlaying;
+  document.getElementById('btn-play').innerHTML = isPlaying ? 'Pause' : 'Play';
+  if (isPlaying) {
+    if (simIdx >= simData.length) simIdx = 0;
+    startPlaybackLoop();
+  } else {
+    if (tickTimer) clearInterval(tickTimer);
+  }
+}
+
+function scrubTimeline(val) {
+  if (simData.length === 0) return;
+  simIdx = Math.floor((val / 100) * (simData.length - 1));
+  updateLiveReadouts(simData[simIdx]);
+  
+  let t_s = simData[simIdx].t_s;
+  document.getElementById('cv-time').textContent = (t_s/60).toFixed(1) + 'm';
+}
+
+function startPlayback() {
+  simIdx = 0;
+  isPlaying = true;
+  document.getElementById('btn-play').innerHTML = 'Pause';
+  startPlaybackLoop();
+}
+
+function startPlaybackLoop() {
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
+    if (simIdx >= simData.length) {
+      clearInterval(tickTimer);
+      isPlaying = false;
+      document.getElementById('btn-play').innerHTML = 'Play';
+      return; 
+    }
+    updateLiveReadouts(simData[simIdx]);
+    
+    let pct = (simIdx / (simData.length - 1)) * 100;
+    document.getElementById('sl-time').value = pct;
+    
+    let t_s = simData[simIdx].t_s;
+    document.getElementById('cv-time').textContent = (t_s/60).toFixed(1) + 'm';
+    
+    simIdx += 15; // advance 15 seconds per tick
+  }, 150);
+}
+
+function updateLiveReadouts(r) {
+  if (!r) return;
+  // Altitude & Speed
+  setText('v-alt', fmt(r.altitude_m, 0, 'm'));
+  const gs = r.ground_speed_ms !== undefined ? ` · GS ${r.ground_speed_ms.toFixed(1)}` : '';
+  setText('v-spd', fmt(r.airspeed_ms, 1, 'm/s'));
+  setText('v-bsfc', r.bsfc_g_kWh ? `BSFC ${r.bsfc_g_kWh.toFixed(0)} g/kWh${gs}` : `Engine idle / off${gs}`);
+  // Engine
+  setText('v-eng-pw', fmt(r.P_engine_W / 1000, 1, 'kW'));
+  // Generator
+  setText('v-gen', fmt(r.P_engine_W * 0.95 / 1000, 1, 'kW'));
+  // Fuel
+  setText('v-fuel-rem', fmt(r.fuel_remaining_kg, 1, 'kg'));
+  setText('v-fuel-burn', `Burned: ${r.fuel_burned_kg.toFixed(2)} kg`);
+  const fuelPct = Math.max(0, r.fuel_remaining_kg / activeFuelStartKg * 100);
+  setWidth('fuel-bar', fuelPct);
+  // Battery
+  setText('v-soc', fmt(r.soc_pct, 1, '%'));
+  setText('v-crate', `C-rate: ${r.c_rate.toFixed(2)} C`);
+  const socNorm = Math.max(0, Math.min(100, (r.soc_pct - 20) / 70 * 100));
+  setWidth('soc-bar', socNorm);
+  // Motor
+  setText('v-motor', fmt(r.P_shaft_W / 1000, 1, 'kW'));
+  setText('v-rpm', `RPM: ${r.motor_rpm ? r.motor_rpm.toFixed(0) : '—'} · ${r.motor_torque_Nm ? r.motor_torque_Nm.toFixed(0) : '—'} Nm`);
+  // Efficiency
+  const eta = r.eta_system > 0.01 && r.eta_system < 1 ? r.eta_system : null;
+  setText('v-eta-val', eta ? (eta * 100).toFixed(1) : '—');
+  document.getElementById('p-eta').textContent = eta ? (eta * 100).toFixed(1) + '%' : '—';
+  // Header pills
+  document.getElementById('p-mtow').textContent = (+document.getElementById('sl-mtow').value).toFixed(0) + ' kg';
+  document.getElementById('p-eng').textContent = (+document.getElementById('sl-engine').value).toFixed(0) + ' kW';
+  // Endurance
+  const endoMin = (r.endurance_remain_s / 60);
+  setText('endo-num', endoMin.toFixed(0));
+  const endoArc = document.getElementById('endo-arc');
+  if (endoArc) {
+    const endoPct = Math.min(1, endoMin / 60);
+    const circ = 188.5;
+    endoArc.style.strokeDashoffset = circ * (1 - endoPct);
+  }
+  const endoSub = document.getElementById('endo-sub');
+  if (endoSub) endoSub.textContent = fuelPct < 15 ? 'LOW FUEL' : 'Loiter-equivalent reserve';
+  // Phase highlight
+  const ph = r.phase;
+  ['takeoff','climb','cruise','loiter','descent','landing'].forEach(p => {
+    const el = document.getElementById('ph-' + p);
+    if (el) el.classList.toggle('active', ph === p.toUpperCase());
+  });
+  // 3D prop speed
+  if (ph === 'TAKEOFF' || ph === 'CLIMB') propSpeed = 0.22;
+  else if (ph === 'CRUISE') propSpeed = 0.14;
+  else if (ph === 'LOITER') propSpeed = 0.08;
+  else if (ph === 'DESCENT' || ph === 'LANDING') propSpeed = 0.06;
+  flightState = {
+    phase: ph,
+    airspeed: r.airspeed_ms || 0,
+    altitude: r.altitude_m || 0,
+    powerKW: (r.P_shaft_W || 0) / 1000,
+    progress: simData.length > 1 ? simIdx / (simData.length - 1) : 0,
+    mission: selectedMission
+  };
+  updateEngineDiagram(r);
+  // bv bottom vals
+  setText('bv-power', (r.P_shaft_W / 1000).toFixed(1) + ' kW');
+  setText('bv-soc', r.soc_pct.toFixed(1) + '%');
+  setText('bv-fuel', r.fuel_burned_kg.toFixed(2) + ' kg');
+}
+
+function fmt(v, dec, unit) {
+  return (v !== undefined && v !== null) ? `${v.toFixed(dec)}<span class="unit">${unit}</span>` : '—';
+}
+function setText(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+function setWidth(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+// ═══════════════════════════════════════════════════════════
+// BUILD CHARTS
+// ═══════════════════════════════════════════════════════════
+function buildCharts() {
+  const d = simData.filter((_, i) => i % 20 === 0);
+  const t = d.map(r => (r.t_s / 60).toFixed(0));
+
+  buildPowerChart(d, t);
+  buildSocChart(d, t);
+  buildFuelChart(d, t);
+  buildParetoChart();
+  buildSparkline('sp-eng', d.map(r => r.P_engine_W / 1000), '#c87941');
+}
+
+const CHART_OPTS = {
+  responsive: true, maintainAspectRatio: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: { legend: { display: false }, tooltip: {
+    backgroundColor: 'rgba(8,12,20,0.95)',
+    borderColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    titleFont: { family: "'JetBrains Mono', monospace", size: 9 },
+    bodyFont:  { family: "'JetBrains Mono', monospace", size: 9 },
+  }},
+  scales: {
+    x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { maxTicksLimit: 6 } },
+    y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { maxTicksLimit: 4 } }
+  }
+};
+
+function buildPowerChart(d, t) {
+  const ctx = document.getElementById('ch-power');
+  if (charts.power) charts.power.destroy();
+  charts.power = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        {
+          label: 'Demand kW',
+          data: d.map(r => (r.P_shaft_required_W || r.P_shaft_W) / 1000),
+          borderColor: 'rgba(240,236,230,0.85)', borderWidth: 1.4,
+          borderDash: [5, 4], fill: false,
+          tension: 0.2, pointRadius: 0
+        },
+        {
+          label: 'Engine kW',
+          data: d.map(r => r.P_engine_W / 1000),
+          borderColor: '#c87941', borderWidth: 1.5,
+          backgroundColor: 'rgba(200,121,65,0.1)', fill: true,
+          tension: 0.3, pointRadius: 0
+        },
+        {
+          label: 'Battery kW',
+          data: d.map(r => r.P_battery_W / 1000),
+          borderColor: '#10d48e', borderWidth: 1.5,
+          backgroundColor: 'rgba(16,212,142,0.08)', fill: true,
+          tension: 0.3, pointRadius: 0
+        },
+        {
+          label: 'Supercap kW',
+          data: d.map(r => (r.P_supercap_W || 0) / 1000),
+          borderColor: '#f5a623', borderWidth: 1.2,
+          backgroundColor: 'rgba(245,166,35,0.06)', fill: true,
+          tension: 0.25, pointRadius: 0
+        },
+        {
+          label: 'Regen kW',
+          data: d.map(r => -(r.P_regen_W || 0) / 1000),
+          borderColor: '#2dd4bf', borderWidth: 1.2,
+          backgroundColor: 'rgba(45,212,191,0.06)', fill: true,
+          tension: 0.25, pointRadius: 0
+        }
+      ]
+    },
+    options: { ...CHART_OPTS }
+  });
+}
+
+function updateEngineDiagram(r) {
+  if (!r) return;
+  const architecture = r.architecture || 'SERIES';
+  const mode = r.mode || 'SERIES_ECMS';
+  const phase = r.phase || 'CRUISE';
+  const isParallel = architecture === 'PARALLEL';
+  const isSeriesParallel = architecture === 'SERIES_PARALLEL' || mode === 'SERIES_PARALLEL_PEAK';
+  const isRegen = architecture === 'SERIES_REGEN' || mode === 'REGEN_DESCENT';
+  const isPeak = isSeriesParallel || phase === 'TAKEOFF' || phase === 'CLIMB';
+  const batteryKW = (r.P_battery_W || 0) / 1000;
+  const supercapKW = (r.P_supercap_W || 0) / 1000;
+  const regenKW = (r.P_regen_W || 0) / 1000;
+  const engineKW = (r.P_engine_W || 0) / 1000;
+  const shaftKW = Math.abs(r.P_shaft_W || 0) / 1000;
+  const socPct = r.soc_pct || 0;
+  const socTarget = r.soc_target_pct || 62;
+  const ecmsS = r.ecms_s || 0;
+  const active = {
+    engine: !isRegen && (r.P_engine_W || 0) > 100,
+    generator: !isParallel && !isRegen && (r.P_engine_W || 0) > 100,
+    storage: Math.abs(r.P_battery_W || 0) > 100 || Math.abs(r.P_supercap_W || 0) > 100,
+    motor: true,
+    prop: true
+  };
+
+  setNode('node-engine', active.engine, false);
+  setNode('node-generator', active.generator, false);
+  setNode('node-dcbus', !isParallel || active.storage, false);
+  setNode('node-storage', active.storage || isRegen, isRegen);
+  setNode('node-motor', true, isRegen);
+  setNode('node-prop', true, isRegen);
+
+  setNode('node-par-engine', isParallel || isSeriesParallel, false);
+  setNode('node-clutch', isParallel || isSeriesParallel, false);
+  setNode('node-gearbox', isParallel || isSeriesParallel, false);
+  setNode('node-par-motor', isSeriesParallel && (batteryKW > 0.1 || supercapKW > 0.1), false);
+  setNode('node-par-prop', isParallel || isSeriesParallel, false);
+
+  setNode('node-battery', Math.abs(batteryKW) > 0.1 || socPct > 0, batteryKW < -0.1 || isRegen);
+  setNode('node-supercap', Math.abs(supercapKW) > 0.1 || isPeak, false);
+  setNode('node-regen', isRegen, isRegen);
+  setNode('node-soc', true, socPct < 30);
+
+  const archText = architecture.replaceAll('_', ' ');
+  const modeText = mode.replaceAll('_', ' ');
+  setPlain('arch-mode-label', archText + ' · ' + modeText);
+  setPlain('arch-clutch-label', 'Clutch: ' + (r.clutch_state || 'OPEN'));
+  setPlain('phase-mode', phase.charAt(0) + phase.slice(1).toLowerCase());
+  setPlain('phase-architecture', isParallel ? 'Parallel' : (isRegen ? 'Series Regen' : (isSeriesParallel ? 'Series-Parallel' : 'Series')));
+
+  setPlain('node-engine-val', `${engineKW.toFixed(1)} kW · BSFC ${r.bsfc_g_kWh ? r.bsfc_g_kWh.toFixed(0) : '0'} g/kWh`);
+  setPlain('node-generator-val', isParallel ? 'Bypassed in direct drive' : `${(engineKW * 0.95).toFixed(1)} kW electric`);
+  setPlain('node-dcbus-val', batteryKW < -0.1 ? 'Charging bus' : 'Engine + storage merge');
+  setPlain('node-storage-val', `Target ${socTarget.toFixed(0)}% · s=${ecmsS.toFixed(2)}`);
+  setPlain('node-motor-val', isRegen ? 'Generator mode' : `${shaftKW.toFixed(1)} kW shaft`);
+  setPlain('node-prop-val', isRegen ? `${regenKW.toFixed(1)} kW recovered` : `${(r.airspeed_ms || 0).toFixed(1)} m/s`);
+  setPlain('node-par-engine-val', `${engineKW.toFixed(1)} kW direct`);
+  setPlain('node-clutch-val', r.clutch_state || 'OPEN');
+  setPlain('node-gearbox-val', isParallel ? 'Direct cruise' : (isSeriesParallel ? 'Blended torque' : 'Bypassed'));
+  setPlain('node-par-motor-val', `${Math.max(0, batteryKW + supercapKW).toFixed(1)} kW assist`);
+  setPlain('node-par-prop-val', `${shaftKW.toFixed(1)} kW shaft`);
+  setPlain('node-battery-val', `${socPct.toFixed(1)}% · ${batteryKW.toFixed(1)} kW`);
+  setPlain('node-supercap-val', `${supercapKW.toFixed(1)} kW peak`);
+  setPlain('node-regen-val', isRegen ? `${regenKW.toFixed(1)} kW drag-limited` : 'Inactive');
+  setPlain('node-soc-val', `Target ${socTarget.toFixed(0)}% · min 20%`);
+
+  const ecmsText = socPct < socTarget - 4
+    ? `SoC ${socPct.toFixed(1)}% is below target, so fuzzy ECMS increases s to favor engine generation and protect reserve.`
+    : socPct > socTarget + 10
+      ? `SoC ${socPct.toFixed(1)}% is above target, so ECMS relaxes engine use and allows more battery contribution.`
+      : `SoC ${socPct.toFixed(1)}% tracks the ${socTarget.toFixed(0)}% target; ECMS balances fuel cost against virtual battery cost.`;
+  const clutchText = isParallel
+    ? 'Clutch locked: engine directly drives propeller while motor assist is minimized.'
+    : isRegen
+      ? 'Clutch open: propeller back-drives motor/generator during descent.'
+      : isPeak
+        ? 'Clutch modulates: turboshaft-generator path covers base load while battery and supercap cover climb peaks.'
+        : 'Clutch open: engine feeds generator, DC bus, motor, and propeller in series mode.';
+  const phaseLogic = isParallel
+    ? 'Cruise demand sits inside the efficient turboshaft band, so the clutch locks and bypasses conversion losses.'
+    : isRegen
+      ? 'Descent demand is negative, so the propeller windmills and the motor/generator recovers only the drag-limited portion.'
+      : isPeak
+        ? 'Takeoff/climb demand contains transients; supercap handles peaks and battery fills the remaining electric deficit.'
+        : 'Series mode gives flexible control for SoC recovery, loiter economy, and engine operation near efficient load.';
+  setPlain('phase-logic', phaseLogic);
+  setPlain('control-ecms', `ECMS s=${ecmsS.toFixed(2)}`);
+  setPlain('control-ecms-text', ecmsText);
+  setPlain('control-storage', isPeak ? 'Supercap peak assist' : (batteryKW < -0.1 ? 'Battery recharge' : 'Battery continuous'));
+  setPlain('control-storage-text', isPeak
+    ? `Supercap supplies ${supercapKW.toFixed(1)} kW for peak shaving while the battery supplies continuous power, reducing battery stress and size.`
+    : `Battery power is ${batteryKW.toFixed(1)} kW; supercap is reserved for sharp takeoff/climb transients and battery life protection.`);
+  setPlain('control-regen', isRegen ? `${regenKW.toFixed(1)} kW recovered` : 'Standby');
+  setPlain('control-regen-text', isRegen
+    ? `Windmilling recovery is limited by aero drag, generator efficiency, and charge acceptance; the controller avoids overcharging above the SoC ceiling.`
+    : 'During descent this lane reverses: propeller torque drives the motor as a generator and sends charge back to storage.');
+  setPlain('logic-clutch', clutchText);
+  setPlain('logic-arch', isParallel ? 'Parallel Cruise' : (isPeak ? 'Series-Parallel Peak' : (isRegen ? 'Series Regen' : 'Series ECMS')));
+  setPlain('logic-regen', isRegen ? `${regenKW.toFixed(1)} kW` : 'Standby');
+}
+
+function setNode(id, isActive, isRecovering) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('active', !!isActive);
+  el.classList.toggle('recover', !!isRecovering);
+  el.classList.toggle('idle', !isActive && !isRecovering);
+}
+
+function buildSocChart(d, t) {
+  const ctx = document.getElementById('ch-soc');
+  if (charts.soc) charts.soc.destroy();
+  charts.soc = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        {
+          data: d.map(r => r.soc_pct),
+          borderColor: '#10d48e', borderWidth: 1.5,
+          backgroundColor: 'rgba(16,212,142,0.08)', fill: true,
+          tension: 0.4, pointRadius: 0
+        },
+        {
+          data: d.map(() => 20),
+          borderColor: 'rgba(232,64,64,0.4)', borderWidth: 1,
+          borderDash: [4, 4], pointRadius: 0, fill: false
+        },
+        {
+          data: d.map(r => (r.stall_margin || 0) * 20),
+          borderColor: 'rgba(245,166,35,0.85)', borderWidth: 1,
+          borderDash: [2, 5], pointRadius: 0, fill: false
+        }
+      ]
+    },
+    options: {
+      ...CHART_OPTS,
+      scales: {
+        ...CHART_OPTS.scales,
+        y: { ...CHART_OPTS.scales.y, min: 10, max: 100 }
+      }
+    }
+  });
+}
+
+function buildFuelChart(d, t) {
+  const ctx = document.getElementById('ch-fuel');
+  if (charts.fuel) charts.fuel.destroy();
+  charts.fuel = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [{
+        label: 'Fuel burned kg',
+        data: d.map(r => r.fuel_burned_kg),
+        borderColor: '#8b6cf7', borderWidth: 1.5,
+        backgroundColor: 'rgba(139,108,247,0.1)', fill: true,
+        tension: 0.3, pointRadius: 0
+      }, {
+        label: 'Mass delta kg',
+        data: d.map(r => d[0].mass_kg - (r.mass_kg || d[0].mass_kg)),
+        borderColor: '#c87941', borderWidth: 1.2,
+        backgroundColor: 'rgba(200,121,65,0.05)', fill: false,
+        tension: 0.25, pointRadius: 0
+      }]
+    },
+    options: { ...CHART_OPTS }
+  });
+}
+
+function buildParetoChart() {
+  const ctx = document.getElementById('ch-pareto');
+  if (charts.pareto) charts.pareto.destroy();
+  const optimized = sweepData.filter(r => r.estimated_mass_kg);
+  if (optimized.length) {
+    charts.pareto = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            data: optimized.map(r => ({ x: r.fuel_burned_kg, y: r.estimated_mass_kg })),
+            backgroundColor: optimized.map(r => r.feasible ? 'rgba(45,212,191,0.45)' : 'rgba(232,64,64,0.35)'),
+            borderColor: optimized.map(r => r.feasible ? 'rgba(45,212,191,0.9)' : 'rgba(232,64,64,0.7)'),
+            pointRadius: optimized.map((_, i) => i === 0 ? 7 : 4),
+            pointStyle: optimized.map((_, i) => i === 0 ? 'star' : 'circle')
+          }
+        ]
+      },
+      options: {
+        ...CHART_OPTS,
+        scales: {
+          x: { ...CHART_OPTS.scales.x, title: { display: true, text: 'Fuel Burn (kg)', color: '#8a8a9a', font: { size: 12 } } },
+          y: { ...CHART_OPTS.scales.y, title: { display: true, text: 'Est. Mass (kg)', color: '#8a8a9a', font: { size: 12 } } }
+        }
+      }
+    });
+    return;
+  }
+  const feasible = sweepData.filter(r => !r.soc_violated && !r.mtow_violated && r.fuel_burned_kg > 0);
+  const twin   = feasible.filter(r =>  r.twin_motors);
+  const single = feasible.filter(r => !r.twin_motors);
+  charts.pareto = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          data: twin.map(r => ({ x: r.fuel_burned_kg, y: r.m_prop_kg })),
+          backgroundColor: 'rgba(45,212,191,0.35)', borderColor: 'rgba(45,212,191,0.6)',
+          pointRadius: 3, pointHoverRadius: 4
+        },
+        {
+          data: single.map(r => ({ x: r.fuel_burned_kg, y: r.m_prop_kg })),
+          backgroundColor: 'rgba(245,166,35,0.35)', borderColor: 'rgba(245,166,35,0.6)',
+          pointRadius: 3, pointHoverRadius: 4
+        },
+        {
+          data: [{ x: 20.0, y: 792 }],
+          backgroundColor: '#c87941', borderColor: '#e8a060',
+          pointRadius: 7, pointStyle: 'star', pointHoverRadius: 9
+        }
+      ]
+    },
+    options: {
+      ...CHART_OPTS,
+      scales: {
+        x: { ...CHART_OPTS.scales.x, title: { display: true, text: 'Fuel (kg)', color: '#8a8a9a', font: { size: 12 } } },
+        y: { ...CHART_OPTS.scales.y, title: { display: true, text: 'Mass (kg)', color: '#8a8a9a', font: { size: 12 } } }
+      }
+    }
+  });
+}
+
+function buildSparkline(id, data, color) {
+  const ctx = document.getElementById(id);
+  if (!ctx || !data.length) return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map((_,i) => i),
+      datasets: [{
+        data: data,
+        borderColor: color, borderWidth: 1.5,
+        fill: true, backgroundColor: color.replace(')', ',0.08)').replace('rgb', 'rgba'),
+        tension: 0.4, pointRadius: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { display: false },
+        y: { display: false }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// RE-RUN SIMULATION
+// ═══════════════════════════════════════════════════════════
+async function rerunSim() {
+  const btn = document.getElementById('btn-sim');
+  btn.classList.add('loading');
+  btn.textContent = 'Running...';
+  try {
+    const params = collectPhysicalParams();
+    const res = await fetch('/api/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      simData = json.data;
+      activeFuelStartKg = json.physical.fuel_start_kg;
+      document.getElementById('p-bat').textContent = json.physical.battery_capacity_kWh + ' kWh';
+      document.getElementById('p-eng').textContent = (json.physical.engine_rated_W / 1000).toFixed(0) + ' kW';
+      writeMissionResult('Simulation', json.summary, json.physical);
+      buildCharts();
+      startPlayback();
+    } else {
+      writeMissionError(json.message || 'Simulation failed');
+    }
+  } catch(e) { console.error(e); writeMissionError(e.message); }
+  btn.classList.remove('loading');
+  btn.textContent = 'Run Sim';
+}
+
+// Slider labels
+bindSlider('sl-mtow', 'cv-mtow', ' kg', 0);
+bindSlider('sl-payload', 'cv-payload', ' kg', 0);
+bindSlider('sl-wing-area', 'cv-wing-area', ' m2', 1);
+bindSlider('sl-ar', 'cv-ar', '', 2);
+bindSlider('sl-cd0', 'cv-cd0', '', 3);
+bindSlider('sl-engine', 'cv-engine', ' kW', 0);
+bindSlider('sl-bat', 'cv-bat', ' kWh', 0);
+bindSlider('sl-supercap', 'cv-supercap', ' kWh', 2);
+bindSlider('sl-speed', 'cv-speed', ' m/s', 0);
+bindSlider('sl-alt', 'cv-alt', ' m', 0);
+bindSlider('sl-wind', 'cv-wind', ' m/s', 0);
+bindSlider('sl-gust', 'cv-gust', ' m/s', 0);
+bindSlider('sl-temp', 'cv-temp', ' C', 0);
+bindSlider('sl-humidity', 'cv-humidity', ' %', 0);
+bindSlider('sl-rain', 'cv-rain', ' mm/h', 0);
+bindSlider('sl-dust', 'cv-dust', '', 1);
+
+function showParamTab(tab) {
+  ['physical', 'natural'].forEach(name => {
+    document.getElementById('params-' + name).classList.toggle('active', name === tab);
+    document.getElementById('tab-' + name).classList.toggle('active', name === tab);
+  });
+}
+
+function toggleMissionPanel() {
+  const panel = document.getElementById('mission-panel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function setMissionProfile(mission) {
+  selectedMission = mission;
+  flightState.mission = mission;
+  document.getElementById('cv-mission').textContent =
+    mission === 'ENDURANCE' ? 'MALE' : (mission === 'MISSION1' ? 'Mission 1' : mission.charAt(0) + mission.slice(1).toLowerCase());
+  if (mission === 'MISSION1') applyMission1Defaults();
+}
+
+function applyMission1Defaults() {
+  document.getElementById('sl-mtow').value = 1000;
+  document.getElementById('sl-payload').value = 200;
+  document.getElementById('sl-wing-area').value = 25;
+  document.getElementById('sl-ar').value = 15;
+  document.getElementById('sl-cd0').value = 0.025;
+  document.getElementById('sl-engine').value = 60;
+  document.getElementById('sl-bat').value = 40;
+  document.getElementById('sl-supercap').value = 0.25;
+  document.getElementById('sl-speed').value = 69;
+  document.getElementById('sl-alt').value = 3000;
+  document.getElementById('mission-climb-rate').value = 3;
+  document.getElementById('mission-cruise-time').value = 15;
+  document.getElementById('mission-loiter-time').value = 30;
+  document.getElementById('mission-takeoff').checked = true;
+  document.getElementById('mission-descent').checked = true;
+  document.getElementById('mission-climb-time').value = '';
+  document.getElementById('mission-climb-dist').value = '';
+  document.getElementById('mission-cruise-dist').value = '';
+  document.getElementById('mission-soc').value = '90';
+  document.getElementById('mission-fuel').value = '64';
+  document.getElementById('cv-mtow').textContent = '1000 kg';
+  document.getElementById('cv-payload').textContent = '200 kg';
+  document.getElementById('cv-wing-area').textContent = '25.0 m2';
+  document.getElementById('cv-ar').textContent = '15.00';
+  document.getElementById('cv-cd0').textContent = '0.025';
+  document.getElementById('cv-engine').textContent = '60 kW';
+  document.getElementById('cv-bat').textContent = '40 kWh';
+  document.getElementById('cv-supercap').textContent = '0.25 kWh';
+  document.getElementById('cv-speed').textContent = '69 m/s';
+  document.getElementById('cv-alt').textContent = '3000 m';
+  document.getElementById('p-mtow').textContent = '1000 kg';
+  document.getElementById('p-eng').textContent = '60 kW';
+  document.getElementById('p-bat').textContent = '40 kWh';
+}
+
+function startMission1() {
+  const select = document.getElementById('sl-mission');
+  if (select) select.value = 'MISSION1';
+  setMissionProfile('MISSION1');
+  rerunSim();
+}
+
+function bindSlider(inputId, labelId, unit, decimals) {
+  const input = document.getElementById(inputId);
+  const label = document.getElementById(labelId);
+  if (!input || !label) return;
+  input.oninput = function() {
+    label.textContent = (+this.value).toFixed(decimals) + unit;
+    if (inputId === 'sl-mtow') document.getElementById('p-mtow').textContent = (+this.value).toFixed(0) + ' kg';
+    if (inputId === 'sl-engine') document.getElementById('p-eng').textContent = (+this.value).toFixed(0) + ' kW';
+    if (inputId === 'sl-bat') document.getElementById('p-bat').textContent = (+this.value).toFixed(0) + ' kWh';
+  };
+}
+
+function collectPhysicalParams() {
+  const fuelField = document.getElementById('mission-fuel').value;
+  const socField = document.getElementById('mission-soc').value;
+  const climbTime = document.getElementById('mission-climb-time').value;
+  const climbDist = document.getElementById('mission-climb-dist').value;
+  const cruiseDist = document.getElementById('mission-cruise-dist').value;
+  return {
+    mission_type: selectedMission,
+    mtow_kg: +document.getElementById('sl-mtow').value,
+    payload_kg: +document.getElementById('sl-payload').value,
+    airframe_kg: 285,
+    wing_area_m2: +document.getElementById('sl-wing-area').value,
+    aspect_ratio: +document.getElementById('sl-ar').value,
+    cd0: +document.getElementById('sl-cd0').value,
+    oswald_efficiency: 0.84,
+    engine_rated_W: +document.getElementById('sl-engine').value * 1000,
+    battery_capacity_kWh: +document.getElementById('sl-bat').value,
+    supercap_energy_kWh: +document.getElementById('sl-supercap').value,
+    motor_rated_W: 70000,
+    fuel_capacity_kg: selectedMission === 'MISSION1' ? 64 : 80,
+    fuel_start_kg: fuelField,
+    initial_soc_pct: socField,
+    cruise_speed_ms: +document.getElementById('sl-speed').value,
+    cruise_alt_m: +document.getElementById('sl-alt').value,
+    loiter_alt_m: Math.min(3000, +document.getElementById('sl-alt').value),
+    climb_rate_ms: +document.getElementById('mission-climb-rate').value,
+    descent_rate_ms: 3,
+    cruise_duration_min: +document.getElementById('mission-cruise-time').value,
+    loiter_duration_min: +document.getElementById('mission-loiter-time').value,
+    takeoff_enabled: document.getElementById('mission-takeoff').checked,
+    descent_enabled: document.getElementById('mission-descent').checked,
+    climb_duration_min: climbTime,
+    climb_distance_km: climbDist,
+    cruise_distance_km: cruiseDist,
+    wind_speed_ms: +document.getElementById('sl-wind').value,
+    gust_speed_ms: +document.getElementById('sl-gust').value,
+    temperature_offset_c: +document.getElementById('sl-temp').value,
+    humidity_pct: +document.getElementById('sl-humidity').value,
+    rain_rate_mm_h: +document.getElementById('sl-rain').value,
+    dust_factor: +document.getElementById('sl-dust').value
+  };
+}
+
+async function runMissionOptimization() {
+  const btn = document.getElementById('btn-mission');
+  btn.classList.add('loading');
+  btn.textContent = 'Optimizing...';
+  try {
+    const res = await fetch('/api/mission-optimize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collectPhysicalParams())
+    });
+    const json = await res.json();
+    if (json.status !== 'ok') {
+      writeMissionError(json.message || 'Optimizer failed');
+      return;
+    }
+    const best = json.best;
+    simData = best.data;
+    sweepData = json.candidates;
+    activeFuelStartKg = best.physical.fuel_start_kg;
+    document.getElementById('sl-engine').value = (best.physical.engine_rated_W / 1000).toFixed(0);
+    document.getElementById('sl-bat').value = best.physical.battery_capacity_kWh.toFixed(0);
+    document.getElementById('mission-fuel').value = best.physical.fuel_start_kg.toFixed(0);
+    document.getElementById('cv-engine').textContent = (+document.getElementById('sl-engine').value).toFixed(0) + ' kW';
+    document.getElementById('cv-bat').textContent = (+document.getElementById('sl-bat').value).toFixed(0) + ' kWh';
+    document.getElementById('p-eng').textContent = (+document.getElementById('sl-engine').value).toFixed(0) + ' kW';
+    document.getElementById('p-bat').textContent = (+document.getElementById('sl-bat').value).toFixed(0) + ' kWh';
+    writeMissionResult('Optimized', best.summary, best.physical);
+    buildCharts();
+    startPlayback();
+  } catch(e) {
+    console.error(e);
+    writeMissionError(e.message);
+  } finally {
+    btn.classList.remove('loading');
+    btn.textContent = 'Optimize Mission';
+  }
+}
+
+function writeMissionResult(title, s, p) {
+  const result = document.getElementById('opt-result');
+  if (!result || !s) return;
+  const missionOk = s.mission_feasible !== undefined ? s.mission_feasible : s.feasible;
+  const status = missionOk ? 'Mission feasible' : 'Needs revision';
+  const massText = s.mass_feasible ? 'mass within MTOW estimate' : 'mass estimate over MTOW';
+  setPlain('out-status', status);
+  setPlain('out-time', s.mission_time_min.toFixed(1) + ' min');
+  setPlain('out-fuel', s.fuel_burned_kg.toFixed(2) + ' kg');
+  setPlain('out-soc', s.final_soc_pct.toFixed(1) + '%');
+  setPlain('out-max-power', s.max_shaft_power_kW.toFixed(1) + ' kW');
+  setPlain('out-mass', s.mass_margin_kg.toFixed(1) + ' kg');
+  setPlain('out-stall', s.min_stall_margin.toFixed(2) + 'x');
+  setPlain('out-range', s.distance_km.toFixed(1) + ' km');
+  setPlain('out-gap', (s.engine_alone_cruise_deficit_kW || 0).toFixed(1) + ' kW');
+  renderPhaseTable(s.phase_stats || {});
+  result.innerHTML =
+    `<strong>${title}: ${status}</strong><br>` +
+    `Engine ${(p.engine_rated_W/1000).toFixed(1)} kW · Battery ${p.battery_capacity_kWh.toFixed(1)} kWh · Fuel ${p.fuel_start_kg.toFixed(1)} kg<br>` +
+    `Mass ${s.final_mass_kg ? s.final_mass_kg.toFixed(1) : s.estimated_mass_kg.toFixed(1)} kg final (${s.mass_margin_kg.toFixed(1)} kg margin, ${massText}) · Fuel burn ${s.fuel_burned_kg.toFixed(2)} kg<br>` +
+    `Final SoC ${s.final_soc_pct.toFixed(1)}% · Range ${s.distance_km.toFixed(1)} km · Engine-alone cruise gap ${(s.engine_alone_cruise_deficit_kW || 0).toFixed(1)} kW<br>` +
+    `Stall margin ${s.min_stall_margin.toFixed(2)}x · Mission violations ${s.violations}<br>` +
+    `Minimum SoC ${(s.min_soc_pct || s.final_soc_pct).toFixed(1)}% · Fuel saving ${s.fuel_reduction_pct !== null && s.fuel_reduction_pct !== undefined ? s.fuel_reduction_pct.toFixed(1) + '%' : '—'} vs 120 kW reference<br>` +
+    `Shaft ${s.shaft_energy_kWh.toFixed(2)} kWh · Regen ${s.regen_energy_kWh.toFixed(2)} kWh · Avg L/D ${s.avg_LD.toFixed(1)}<br>` +
+    `Supercap peak ${s.supercap_peak_kW.toFixed(1)} kW · ECMS avg s=${s.avg_ecms_s.toFixed(2)} · Violations ${s.violations}<br>` +
+    `Assumed ${s.assumptions.initial_soc_pct.toFixed(0)}% battery and ${s.assumptions.fuel_start_kg.toFixed(0)} kg fuel when fields are blank.`;
+}
+
+function writeMissionError(message) {
+  const result = document.getElementById('opt-result');
+  if (result) result.innerHTML = `<strong>Mission error</strong><br>${message}`;
+}
+
+function setPlain(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function renderPhaseTable(stats) {
+  const tbody = document.querySelector('#phase-table tbody');
+  if (!tbody) return;
+  const order = ['TAKEOFF', 'CLIMB', 'CRUISE', 'LOITER', 'DESCENT', 'LANDING'];
+  const rows = order.filter(p => stats[p]).map(p => {
+    const r = stats[p];
+    return `<tr><td>${p}</td><td>${r.duration_min.toFixed(1)}</td><td>${r.avg_power_kW.toFixed(1)}</td><td>${(r.avg_engine_kW || 0).toFixed(1)}</td><td>${(r.avg_battery_kW || 0).toFixed(1)}</td><td>${r.soc_drop_pct.toFixed(1)}%</td></tr>`;
+  });
+  tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="6">No phase data returned.</td></tr>';
+}
+
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// THREE.JS — UAV HERO MODEL
+// ═══════════════════════════════════════════════════════════
+let propSpeed = 0.12;
+let prop_ref, engGlow_ref, batGlow_ref;
+
+const PDS = {
+  scale: 0.34,
+  lengthM: 8.90,
+  spanM: 16.00,
+  heightM: 2.55,
+  mtowKg: 1000,
+  payloadKg: 200,
+  wingAreaM2: 21.8,
+  aspectRatio: 11.75,
+  taper: 0.45,
+  dihedralDeg: 2,
+  propDiameterM: 2.20,
+  tailSpanM: 4.30,
+  verticalTailHeightM: 1.10
+};
+
+function makeRoundedBox(w, h, d, mat) {
+  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d, 2, 1, 2), mat);
+}
+
+function init3D() {
+  const mount = document.getElementById('three-mount');
+  const status = document.getElementById('hero-status');
+
+  if (typeof THREE === 'undefined') {
+    status.textContent = 'Three.js failed to load from CDN';
+    status.classList.add('error');
+    console.error('THREE is undefined - CDN script did not load');
+    return;
+  }
+
+  const W = mount.clientWidth;
+  const H = mount.clientHeight;
+
+  if (W < 50 || H < 50) {
+    setTimeout(init3D, 150);
+    return;
+  }
+
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x04050a, 1);
+    mount.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 200);
+    camera.position.set(8.4, 2.7, 8.8);
+    camera.lookAt(0, 0, 0);
+
+    scene.add(new THREE.AmbientLight(0x303050, 1.5));
+    scene.add(new THREE.HemisphereLight(0x4060a0, 0x101010, 1.2));
+
+    const key = new THREE.DirectionalLight(0xfff0d0, 3.5);
+    key.position.set(6, 8, 4);
+    scene.add(key);
+
+    const rim1 = new THREE.DirectionalLight(0xe09050, 5.0);
+    rim1.position.set(-8, 2, -4);
+    scene.add(rim1);
+
+    // Rim 2 — teal from rear-right
+    const rim2 = new THREE.DirectionalLight(0x40c0b0, 2.5);
+    rim2.position.set(-3, 0, 7);
+    scene.add(rim2);
+
+    // Fill from front
+    const fill = new THREE.DirectionalLight(0x405080, 1.5);
+    fill.position.set(5, -1, 0);
+    scene.add(fill);
+
+    const matBody = new THREE.MeshPhongMaterial({
+      color: 0x465772, specular: 0x7d8aa0, shininess: 70
+    });
+    const matCowl = new THREE.MeshPhongMaterial({
+      color: 0x556680, specular: 0x8899aa, shininess: 80
+    });
+    const matPanel = new THREE.MeshPhongMaterial({ color: 0x253044, shininess: 35 });
+    const matDark = new THREE.MeshPhongMaterial({ color: 0x10141d, specular: 0x444444, shininess: 50 });
+    const matBlade = new THREE.MeshPhongMaterial({ color: 0x8895a5, specular: 0xc8d0dc, shininess: 90 });
+    const matEngine = new THREE.MeshPhongMaterial({
+      color: 0x884422, specular: 0xaa6633, shininess: 60,
+      emissive: 0x331100, emissiveIntensity: 0.8
+    });
+    const matBattery = new THREE.MeshPhongMaterial({
+      color: 0x228855, specular: 0x33aa66, shininess: 40,
+      emissive: 0x004420, emissiveIntensity: 0.6
+    });
+    const matMotor = new THREE.MeshPhongMaterial({
+      color: 0x2255aa, specular: 0x4488cc, shininess: 80,
+      emissive: 0x001144, emissiveIntensity: 0.5
+    });
+    const matFuel = new THREE.MeshPhongMaterial({
+      color: 0x6633aa, specular: 0x8855cc, shininess: 60,
+      emissive: 0x220055, emissiveIntensity: 0.5,
+      transparent: true, opacity: 0.8
+    });
+    const matGlass = new THREE.MeshPhongMaterial({
+      color: 0x3388aa, specular: 0x66bbdd, shininess: 100,
+      emissive: 0x115577, emissiveIntensity: 1.0,
+      transparent: true, opacity: 0.7
+    });
+    const matGear = new THREE.MeshPhongMaterial({ color: 0x404550, shininess: 45 });
+
+    const uav = new THREE.Group();
+    uav.userData = { name: 'PDS v1.0 MALE hybrid-electric UAV' };
+
+    const S = PDS.scale;
+    const L = PDS.lengthM * S;
+    const halfSpan = PDS.spanM * S / 2;
+    const propRadius = PDS.propDiameterM * S / 2;
+    const tailSpan = PDS.tailSpanM * S;
+    const vTailH = PDS.verticalTailHeightM * S;
+    const fuseRadius = 0.36;
+
+    const fuse = new THREE.Mesh(
+      new THREE.CylinderGeometry(fuseRadius, fuseRadius * 0.72, L * 0.72, 48),
+      matBody
+    );
+    fuse.rotation.z = Math.PI / 2;
+    fuse.scale.y = 0.92;
+    uav.add(fuse);
+
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(fuseRadius, 48, 24), matBody);
+    nose.scale.set(1.9, 0.88, 0.88);
+    nose.position.x = L * 0.39;
+    uav.add(nose);
+
+    const tailCone = new THREE.Mesh(new THREE.ConeGeometry(fuseRadius * 0.72, L * 0.14, 40), matBody);
+    tailCone.rotation.z = Math.PI / 2;
+    tailCone.position.x = -L * 0.43;
+    uav.add(tailCone);
+
+    const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.48, 32), matCowl);
+    spinner.rotation.z = -Math.PI / 2;
+    spinner.position.x = L * 0.52;
+    uav.add(spinner);
+
+    const intake = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.42), matDark);
+    intake.position.set(L * 0.36, -0.33, 0);
+    uav.add(intake);
+
+    [-1.45, -0.78, -0.10, 0.62, 1.36].forEach(function(x) {
+      var ring = new THREE.Mesh(new THREE.TorusGeometry(fuseRadius * 0.98, 0.007, 8, 48), matPanel);
+      ring.rotation.y = Math.PI / 2;
+      ring.position.x = x;
+      uav.add(ring);
+    });
+
+    function bay(label, x, colorMat, w) {
+      var door = new THREE.Mesh(new THREE.BoxGeometry(w, 0.015, 0.44), matPanel);
+      door.position.set(x, -0.36, 0);
+      uav.add(door);
+      var core = new THREE.Mesh(new THREE.BoxGeometry(w * 0.82, 0.12, 0.34), colorMat);
+      core.position.set(x, -0.26, 0);
+      core.userData.label = label;
+      uav.add(core);
+      return core;
+    }
+
+    bay('Avionics Bay', L * 0.23, matGlass, 0.54);
+    bay('Modular Payload Bay: EO/IR, SAR, LiDAR, SIGINT, Cargo', L * 0.07, matMotor, 0.86);
+    var fuelTank = bay('Fuel Tank near CG', -L * 0.06, matFuel, 0.55);
+    var bat = bay('High-voltage Battery below wing spar', -L * 0.20, matBattery, 0.75);
+    batGlow_ref = new THREE.PointLight(0x00ff80, 2.3, 3.0);
+    batGlow_ref.position.set(-L * 0.20, -0.34, 0);
+    uav.add(batGlow_ref);
+
+    var eng = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.62, 24), matEngine);
+    eng.rotation.z = Math.PI / 2;
+    eng.position.set(-L * 0.31, -0.02, 0);
+    eng.userData.label = '60 kW Turboshaft Engine';
+    uav.add(eng);
+
+    for (var i = 0; i < 3; i++) {
+      var er = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.012, 6, 20), matEngine);
+      er.rotation.y = Math.PI / 2;
+      er.position.set(-L * 0.35 + i * 0.14, -0.02, 0);
+      uav.add(er);
+    }
+
+    [-0.18, 0.18].forEach(function(z) {
+      var exh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.12), matEngine);
+      exh.position.set(-L * 0.42, 0.05, z);
+      uav.add(exh);
+    });
+
+    var eGlow = new THREE.PointLight(0xff4400, 4.0, 4.5);
+    eGlow.position.set(-L * 0.42, 0.05, 0);
+    uav.add(eGlow);
+    engGlow_ref = eGlow;
+
+    function makeWing(side) {
+      var rootChord = 1.18;
+      var tipChord = rootChord * PDS.taper;
+      var span = halfSpan - 0.26;
+      var shape = new THREE.Shape();
+      shape.moveTo(-rootChord * 0.46, 0);
+      shape.lineTo(rootChord * 0.54, 0);
+      shape.lineTo(tipChord * 0.48, side * span);
+      shape.quadraticCurveTo(0, side * (span + 0.22), -tipChord * 0.48, side * span);
+      shape.lineTo(-rootChord * 0.46, 0);
+      var geo = new THREE.ExtrudeGeometry(shape, { depth: 0.08, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 });
+      var mesh = new THREE.Mesh(geo, matBody);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.rotation.z = (PDS.dihedralDeg * -side) * Math.PI / 180;
+      mesh.position.set(-0.02, 0.38, 0);
+      mesh.userData.label = side < 0 ? 'Left high-mounted straight wing' : 'Right high-mounted straight wing';
+      return mesh;
+    }
+    uav.add(makeWing(-1));
+    uav.add(makeWing(1));
+
+    var spar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, halfSpan * 2 - 0.8), matDark);
+    spar.position.set(-0.16, 0.40, 0);
+    uav.add(spar);
+
+    var navL = new THREE.PointLight(0xff2030, 1.6, 2.2);
+    navL.position.set(-0.04, 0.42, -halfSpan);
+    uav.add(navL);
+    var navR = new THREE.PointLight(0x10ff70, 1.6, 2.2);
+    navR.position.set(-0.04, 0.42, halfSpan);
+    uav.add(navR);
+
+    function makeBoom(z) {
+      var boom = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, L * 0.52, 20), matBody);
+      boom.rotation.z = Math.PI / 2;
+      boom.position.set(-L * 0.22, 0.18, z);
+      boom.userData.label = 'Straight carbon-fiber tail boom';
+      uav.add(boom);
+
+      var fin = makeRoundedBox(0.38, vTailH, 0.05, matBody);
+      fin.position.set(-L * 0.48, 0.18 + vTailH * 0.48, z);
+      fin.userData.label = 'Vertical tail surface';
+      uav.add(fin);
+    }
+    makeBoom(-tailSpan * 0.36);
+    makeBoom(tailSpan * 0.36);
+
+    var hTail = makeRoundedBox(0.48, 0.06, tailSpan, matBody);
+    hTail.position.set(-L * 0.48, 0.63, 0);
+    hTail.userData.label = 'Conventional H-tail, 4.30 m span';
+    uav.add(hTail);
+
+    var propGroup = new THREE.Group();
+    for (var b = 0; b < 3; b++) {
+      var blade = makeRoundedBox(0.11, propRadius * 0.86, 0.025, matBlade);
+      blade.position.y = propRadius * 0.43;
+      blade.rotation.z = -0.15;
+      var arm = new THREE.Group();
+      arm.add(blade);
+      arm.rotation.x = (b * Math.PI * 2) / 3;
+      propGroup.add(arm);
+    }
+    propGroup.rotation.z = Math.PI / 2;
+    propGroup.position.x = L * 0.53;
+    propGroup.userData.label = 'Single nose-mounted 2.20 m 3-blade tractor propeller';
+    uav.add(propGroup);
+    prop_ref = propGroup;
+
+    var propDisk = new THREE.Mesh(
+      new THREE.TorusGeometry(propRadius * 0.72, 0.008, 8, 80),
+      new THREE.MeshBasicMaterial({ color: 0x90b0c8, transparent: true, opacity: 0.28 })
+    );
+    propDisk.rotation.y = Math.PI / 2;
+    propDisk.position.x = L * 0.53;
+    uav.add(propDisk);
+
+    [[0.78, -0.47, 0], [-0.44, -0.48, -0.42], [-0.44, -0.48, 0.42]].forEach(function(p, idx) {
+      var strut = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.38, 10), matGear);
+      strut.position.set(p[0], -0.31, p[2]);
+      strut.rotation.z = idx === 0 ? 0.08 : -0.08;
+      uav.add(strut);
+      var w = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.025, 8, 18), matGear);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(p[0], p[1], p[2]);
+      uav.add(w);
+    });
+
+    var groundLine = new THREE.Mesh(
+      new THREE.BoxGeometry(L * 0.95, 0.008, halfSpan * 1.35),
+      new THREE.MeshBasicMaterial({ color: 0x102024, transparent: true, opacity: 0.35 })
+    );
+    groundLine.position.y = -0.54;
+    scene.add(groundLine);
+
+    uav.position.y = 0.2;
+    scene.add(uav);
+
+    status.classList.add('hidden');
+
+    var isDrag = false, px = 0, py = 0;
+    var rotY = -0.72, rotX = 0.18;
+    mount.addEventListener('mousedown', function(e) { isDrag = true; px = e.clientX; py = e.clientY; });
+    window.addEventListener('mouseup', function() { isDrag = false; });
+    window.addEventListener('mousemove', function(e) {
+      if (!isDrag) return;
+      rotY += (e.clientX - px) * 0.005; px = e.clientX;
+      rotX += (e.clientY - py) * 0.004; py = e.clientY;
+      rotX = Math.max(-0.6, Math.min(0.6, rotX));
+    });
+
+    function missionPose(t) {
+      var phase = flightState.phase || 'CRUISE';
+      var progress = Math.max(0, Math.min(1, flightState.progress || 0));
+      var map = {
+        TAKEOFF: { pitch: -0.10, bank: 0.00, yaw: 0.03, climb: 0.06 },
+        CLIMB: { pitch: -0.16, bank: 0.04, yaw: 0.06, climb: 0.12 },
+        CRUISE: { pitch: -0.02, bank: 0.00, yaw: 0.00, climb: 0.00 },
+        LOITER: { pitch: 0.00, bank: 0.20, yaw: Math.sin(t * 0.45) * 0.10, climb: 0.02 },
+        DESCENT: { pitch: 0.11, bank: -0.05, yaw: -0.05, climb: -0.10 },
+        LANDING: { pitch: 0.15, bank: 0.00, yaw: 0.00, climb: -0.16 }
+      };
+      var pose = map[phase] || map.CRUISE;
+      var missionBank = selectedMission === 'MAPPING' ? Math.sin(t * 0.35) * 0.08 : 0;
+      if (selectedMission === 'CARGO') pose.pitch += 0.03;
+      if (selectedMission === 'ENDURANCE') pose.pitch -= 0.02;
+      return {
+        pitch: pose.pitch,
+        bank: pose.bank + missionBank,
+        yaw: pose.yaw,
+        y: 0.2 + pose.climb + 0.025 * Math.sin(t * 0.7),
+        x: -0.45 + progress * 0.9
+      };
+    }
+
+    var clock = new THREE.Clock();
+    (function loop() {
+      requestAnimationFrame(loop);
+      var t = clock.getElapsedTime();
+
+      var r = 10.5;
+      camera.position.x = r * Math.cos(rotY) * Math.cos(rotX);
+      camera.position.y = r * Math.sin(rotX) + 1.2;
+      camera.position.z = r * Math.sin(rotY) * Math.cos(rotX);
+      camera.lookAt(0, 0.0, 0);
+
+      if (prop_ref) prop_ref.rotation.x += propSpeed;
+
+      if (engGlow_ref) engGlow_ref.intensity = 3.0 + 1.5 * Math.sin(t * 3);
+      if (batGlow_ref) batGlow_ref.intensity = 2.0 + 0.5 * Math.sin(t * 1.5 + 1);
+
+      var pose = missionPose(t);
+      uav.position.x += (pose.x - uav.position.x) * 0.04;
+      uav.position.y += (pose.y - uav.position.y) * 0.06;
+      uav.rotation.x += (pose.pitch - uav.rotation.x) * 0.05;
+      uav.rotation.y += (pose.yaw - uav.rotation.y) * 0.05;
+      uav.rotation.z += (pose.bank - uav.rotation.z) * 0.05;
+
+      renderer.render(scene, camera);
+    })();
+
+    window.addEventListener('resize', function() {
+      var w = mount.clientWidth;
+      var h = mount.clientHeight;
+      if (w < 50 || h < 50) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    console.log('PDS v1.0 3D UAV initialized: ' + W + 'x' + H + ' - ' + uav.children.length + ' objects');
+
+  } catch (err) {
+    status.textContent = '3D Error: ' + err.message;
+    status.classList.add('error');
+    console.error('3D init failed:', err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('load', function() {
+  // 'load' fires AFTER all resources (including CDN scripts) are ready
+  setTimeout(function() {
+    init3D();
+    loadData();
+  }, 300);
+});
+</script>
+</body>
+</html>

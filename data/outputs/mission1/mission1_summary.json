@@ -1,0 +1,112 @@
+{
+  "mission": "Mission 1",
+  "total_duration_min": 107.12,
+  "total_distance_km": 317.317,
+  "landing_mass_kg": 958.484,
+  "fuel_consumed_kg": 41.5164,
+  "fuel_remaining_kg": 22.4836,
+  "initial_soc_pct": 90.0,
+  "final_soc_pct": 49.77,
+  "min_soc_pct": 47.043,
+  "total_shaft_kWh": 67.7537,
+  "bat_discharged_kWh": 14.6912,
+  "regen_kWh": 1.0334,
+  "phases": {
+    "TAKEOFF": {
+      "duration_min": 0.17,
+      "e_shaft_kWh": 0.103,
+      "e_bat_kWh": 0.0,
+      "fuel_kg": 0.076,
+      "soc_start": 90.0,
+      "soc_end": 90.0,
+      "avg_shaft_kW": 45.32,
+      "avg_engine_kW": 45.32,
+      "avg_motor_kW": 0.0,
+      "avg_bat_kW": 0.0
+    },
+    "CLIMB": {
+      "duration_min": 25.0,
+      "e_shaft_kWh": 29.224,
+      "e_bat_kWh": 8.162,
+      "fuel_kg": 15.0,
+      "soc_start": 89.98,
+      "soc_end": 66.14,
+      "avg_shaft_kW": 85.53,
+      "avg_engine_kW": 60.0,
+      "avg_motor_kW": 67.9,
+      "avg_bat_kW": 19.59
+    },
+    "CRUISE": {
+      "duration_min": 20.0,
+      "e_shaft_kWh": 21.843,
+      "e_bat_kWh": 6.529,
+      "fuel_kg": 12.0,
+      "soc_start": 66.12,
+      "soc_end": 47.04,
+      "avg_shaft_kW": 79.91,
+      "avg_engine_kW": 60.0,
+      "avg_motor_kW": 67.9,
+      "avg_bat_kW": 19.59
+    },
+    "LOITER": {
+      "duration_min": 30.0,
+      "e_shaft_kWh": 16.397,
+      "e_bat_kWh": 0.0,
+      "fuel_kg": 14.441,
+      "soc_start": 47.04,
+      "soc_end": 47.04,
+      "avg_shaft_kW": 39.99,
+      "avg_engine_kW": 48.14,
+      "avg_motor_kW": 39.99,
+      "avg_bat_kW": 0.0
+    },
+    "DESCENT": {
+      "duration_min": 14.28,
+      "e_shaft_kWh": 0.0,
+      "e_bat_kWh": 0.0,
+      "fuel_kg": 0.0,
+      "soc_start": 47.05,
+      "soc_end": 48.8,
+      "avg_shaft_kW": -5.31,
+      "avg_engine_kW": 0.0,
+      "avg_motor_kW": 0.0,
+      "avg_bat_kW": -2.79
+    },
+    "FINAL_APPROACH": {
+      "duration_min": 16.67,
+      "e_shaft_kWh": 0.0,
+      "e_bat_kWh": 0.0,
+      "fuel_kg": 0.0,
+      "soc_start": 48.8,
+      "soc_end": 49.77,
+      "avg_shaft_kW": -2.53,
+      "avg_engine_kW": 0.0,
+      "avg_motor_kW": 0.0,
+      "avg_bat_kW": -1.33
+    },
+    "FLARE": {
+      "duration_min": 1.0,
+      "e_shaft_kWh": 0.186,
+      "e_bat_kWh": 0.0,
+      "fuel_kg": 0.0,
+      "soc_start": 49.77,
+      "soc_end": 49.77,
+      "avg_shaft_kW": 13.61,
+      "avg_engine_kW": 0.0,
+      "avg_motor_kW": 0.0,
+      "avg_bat_kW": 0.0
+    }
+  },
+  "spec_params": {
+    "MTOW_kg": 1000.0,
+    "fuel_initial_kg": 64.0,
+    "bat_capacity_kWh": 36.0,
+    "engine_max_kW": 60.0,
+    "motor_max_kW": 70.0,
+    "wing_area_m2": 25.0,
+    "AR": 15.0,
+    "CD0": 0.025,
+    "eta_prop": 0.82,
+    "BSFC_kg_per_kWh": 0.6
+  }
+}

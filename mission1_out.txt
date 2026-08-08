@@ -1,0 +1,47 @@
+======================================================================
+  MISSION 1 ù HYBRID ELECTRIC UAV SIMULATION
+======================================================================
+  Aircraft:  1000 kg MTOW | 200 kg payload | 64 kg fuel
+  Battery:   36.0 kWh NMC | 160.0 kg | SoC_init=90%
+  Engine:    60 kW turboshaft | BSFC=0.6 kg/kWh
+  Motor:     70 kW peak | eta=0.95
+  Wing:      S=25.0 m▓ | AR=15.0 | CD0=0.025 | e=0.8
+  k_induced: 0.02653
+  Wingspan:  19.36 m | Chord: 1.29 m
+
+
+  Total timesteps: 6427
+  Constraint violations: 0
+
+======================================================================
+  MISSION 1 ù SIMULATION RESULTS
+======================================================================
+  Total mission duration     : 107.1 min  (6427 s)
+  Total horizontal distance  : 317.3 km
+  Landing mass               : 958.5 kg
+
+  Fuel consumed              : 41.52 kg
+  Fuel remaining             : 22.48 kg
+  Fuel initial               : 64.0 kg
+
+  Battery SoC initial        : 90.0 %
+  Battery SoC final          : 49.8 %
+  Battery SoC minimum        : 47.0 %
+
+  Total shaft energy         : 67.75 kWh
+  Battery discharged (net)   : 14.69 kWh
+  Regenerated energy         : 1.03 kWh
+
+  Constraint violations      : 0
+
+Traceback (most recent call last):
+  File "D:\College\Yuvaudhyami\Hackathon\HALAerothon_Simulaotr1x\mission1_sim.py", line 1250, in <module>
+    print_report(records, violations)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "D:\College\Yuvaudhyami\Hackathon\HALAerothon_Simulaotr1x\mission1_sim.py", line 842, in print_report
+    print("  \u2500\u2500 Validation vs Spec Targets \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 2-3: character maps to <undefined>

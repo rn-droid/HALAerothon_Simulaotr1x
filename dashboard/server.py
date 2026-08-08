@@ -287,10 +287,51 @@ def index():
 @app.route("/api/data/timeseries")
 def get_timeseries():
     """Return the pre-computed baseline simulation time-series."""
-    json_path = ROOT / "data" / "outputs" / "mission_timeseries.json"
+    # Try Mission 1 new output first, fall back to old path
+    for candidate in [
+        ROOT / "data" / "outputs" / "mission1" / "mission1_timeseries.json",
+        ROOT / "data" / "outputs" / "mission_timeseries.json",
+    ]:
+        if candidate.exists():
+            with open(candidate) as f:
+                data = json.load(f)
+            return jsonify(data)
+    return jsonify({"error": "No timeseries data found"}), 404
+
+
+@app.route("/api/mission1/timeseries")
+def get_mission1_timeseries():
+    """Return Mission 1 pre-computed full timeseries (6427 steps)."""
+    json_path = ROOT / "data" / "outputs" / "mission1" / "mission1_timeseries.json"
+    if not json_path.exists():
+        return jsonify({"error": "Mission 1 timeseries not found. Run mission1_sim.py first."}), 404
+    with open(json_path) as f:
+        data = json.load(f)
+    # Thin to every 5th step for fast transfer (~1285 points)
+    return jsonify(data[::5])
+
+
+@app.route("/api/mission1/timeseries/full")
+def get_mission1_timeseries_full():
+    """Return Mission 1 timeseries without thinning (for final result mode)."""
+    json_path = ROOT / "data" / "outputs" / "mission1" / "mission1_timeseries.json"
+    if not json_path.exists():
+        return jsonify({"error": "Mission 1 timeseries not found."}), 404
     with open(json_path) as f:
         data = json.load(f)
     return jsonify(data)
+
+
+@app.route("/api/mission1/summary")
+def get_mission1_summary():
+    """Return Mission 1 final summary metrics."""
+    json_path = ROOT / "data" / "outputs" / "mission1" / "mission1_summary.json"
+    if not json_path.exists():
+        return jsonify({"error": "Mission 1 summary not found."}), 404
+    with open(json_path) as f:
+        data = json.load(f)
+    return jsonify(data)
+
 
 
 @app.route("/api/data/sweep")

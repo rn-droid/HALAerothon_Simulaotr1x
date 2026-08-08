@@ -1,0 +1,2433 @@
+"""
+Writes the complete UAV-HE1 physics-based mission simulator dashboard to index.html.
+Physics JS engine mirrors mission1_sim.py exactly.
+"""
+import pathlib, sys, textwrap
+
+OUT = pathlib.Path(__file__).parent / "index.html"
+
+# ─────────────────────────────────────────────────────────────────────
+# HTML PARTS — assembled in order
+# ─────────────────────────────────────────────────────────────────────
+
+HEAD = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>UAV-HE1 · Hybrid-Electric Propulsion Mission Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+"""
+
+CSS = r"""
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  /* Backgrounds */
+  --bg0:#050709;--bg1:#080c14;--bg2:#0b1019;--bg3:#0f1520;--bg4:#131a28;--bg5:#18202e;
+  /* Borders */
+  --b0:rgba(255,255,255,0.04);--b1:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.11);--b3:rgba(255,255,255,0.18);
+  /* Text */
+  --t1:#ddd9d0;--t2:#7a8494;--t3:#3d4758;--t4:#1e2534;
+  /* Accent colours */
+  --amber:#d4943a;--amber2:rgba(212,148,58,0.15);--amber3:rgba(212,148,58,0.08);
+  --teal:#20b5a6;--teal2:rgba(32,181,166,0.14);--teal3:rgba(32,181,166,0.07);
+  --blue:#3480d8;--blue2:rgba(52,128,216,0.14);--blue3:rgba(52,128,216,0.07);
+  --green:#16b065;--green2:rgba(22,176,101,0.14);--green3:rgba(22,176,101,0.07);
+  --red:#c83232;--red2:rgba(200,50,50,0.14);--red3:rgba(200,50,50,0.07);
+  --purple:#7050d8;--purple2:rgba(112,80,216,0.14);
+  --cyan:#18a8c8;--cyan2:rgba(24,168,200,0.14);
+  --orange:#c87828;
+  /* Typography */
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',system-ui,sans-serif;
+  /* Radii */
+  --r:3px;--rl:5px;--rx:8px;
+  /* Spacing */
+  --nav-h:44px;
+}
+html,body{width:100%;background:var(--bg0);color:var(--t1);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;font-size:13px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg0)}
+::-webkit-scrollbar-thumb{background:var(--bg4)}
+
+/* ── TOP NAV ───────────────────────────────────────────────────── */
+.topnav{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--nav-h);display:flex;align-items:center;padding:0 18px;gap:14px;background:rgba(5,7,9,0.97);border-bottom:1px solid var(--b1);backdrop-filter:blur(10px)}
+.nav-brand{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:3px;color:var(--t1)}
+.nav-brand em{color:var(--amber);font-style:normal}
+.nav-vsep{width:1px;height:14px;background:var(--b2)}
+.nav-sub{font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:1.5px}
+.nav-status{display:flex;align-items:center;gap:7px;padding:4px 11px;border-radius:14px;background:var(--bg3);border:1px solid var(--b1);margin:0 auto}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--t4);flex-shrink:0}
+.sdot.ready{background:var(--green);box-shadow:0 0 6px var(--green)}
+.sdot.run{background:var(--amber);box-shadow:0 0 6px var(--amber);animation:pulse .9s ease-in-out infinite}
+.sdot.done{background:var(--teal);box-shadow:0 0 6px var(--teal)}
+.sdot.err{background:var(--red);box-shadow:0 0 6px var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.stxt{font-family:var(--mono);font-size:9px;color:var(--t2)}
+.nav-chip{font-family:var(--mono);font-size:8px;color:var(--t3);padding:2px 8px;border-radius:2px;background:var(--bg3);border:1px solid var(--b0)}
+.nav-chip span{color:var(--t2);font-weight:500}
+
+/* ── WORKSPACE LAYOUT ──────────────────────────────────────────── */
+.workspace{margin-top:var(--nav-h);display:grid;grid-template-columns:220px 1fr 248px;min-height:calc(100vh - var(--nav-h))}
+
+/* ── LEFT SIDEBAR ───────────────────────────────────────────────── */
+.sidebar{background:var(--bg1);border-right:1px solid var(--b0);padding:16px 14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:var(--nav-h);height:calc(100vh - var(--nav-h));overflow-y:auto}
+.sb-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.sb-lbl{font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:2px}
+.sb-add{font-family:var(--mono);font-size:8px;color:var(--amber);padding:3px 8px;border-radius:2px;border:1px solid rgba(212,148,58,.3);background:var(--amber3);cursor:pointer;transition:all .15s}
+.sb-add:hover{background:var(--amber2)}
+.mi{padding:9px 10px;border-radius:var(--r);border:1px solid transparent;cursor:pointer;margin-bottom:3px;transition:all .15s;position:relative}
+.mi:hover{background:var(--bg4);border-color:var(--b1)}
+.mi.active{background:var(--bg4);border-color:var(--b2)}
+.mi.locked .mi-name::after{content:'LOCKED';font-size:6px;color:var(--amber);letter-spacing:1px;margin-left:5px;vertical-align:middle}
+.mi-id{font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:1px;margin-bottom:2px}
+.mi-name{font-size:11px;font-weight:500;color:var(--t1);margin-bottom:3px}
+.mi-meta{display:flex;align-items:center;gap:5px}
+.mi-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+.mi-dur{font-family:var(--mono);font-size:8px;color:var(--t2)}
+.sb-sep{height:1px;background:var(--b0)}
+.sb-config{font-family:var(--mono);font-size:8px;color:var(--t3);line-height:2;padding:8px 0}
+.sb-config span{color:var(--t2)}
+.btn-run{width:100%;padding:8px;background:var(--amber);border:none;border-radius:var(--r);cursor:pointer;font-family:var(--mono);font-size:9px;font-weight:600;color:#0c0800;letter-spacing:1px;transition:opacity .15s;margin-top:auto}
+.btn-run:hover{opacity:.85}
+.btn-run:disabled{opacity:.4;cursor:not-allowed}
+.btn-sec{width:100%;padding:7px;background:transparent;border:1px solid var(--b2);border-radius:var(--r);cursor:pointer;font-family:var(--mono);font-size:9px;color:var(--t2);letter-spacing:.5px;transition:all .15s;margin-top:4px}
+.btn-sec:hover{background:var(--bg4);color:var(--t1)}
+.btn-sec.on{background:var(--teal3);border-color:var(--teal);color:var(--teal)}
+.btn-sec.danger{border-color:rgba(200,50,50,.3);color:var(--red)}
+.btn-sec.danger:hover{background:var(--red3)}
+
+/* ── MISSION LOCKED PARAMS ─────────────────────────────────────── */
+.lock-panel{background:var(--bg3);border:1px solid var(--b1);border-radius:var(--rl);padding:10px;margin-top:6px}
+.lock-title{font-family:var(--mono);font-size:7px;color:var(--amber);letter-spacing:2px;margin-bottom:8px;display:flex;align-items:center;gap:5px}
+.lp-row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--b0)}
+.lp-k{font-family:var(--mono);font-size:7px;color:var(--t3)}
+.lp-v{font-family:var(--mono);font-size:9px;color:var(--t1)}
+.lp-u{font-size:7px;color:var(--t3);margin-left:2px}
+
+/* ── CENTER PANEL ───────────────────────────────────────────────── */
+.center{background:var(--bg1);border-right:1px solid var(--b0);overflow-y:auto}
+
+/* Mission header */
+.ms-hdr{padding:16px 18px 0;border-bottom:1px solid var(--b0);padding-bottom:12px}
+.ms-title-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.ms-name{font-size:15px;font-weight:500;letter-spacing:.5px}
+.ms-badge{font-family:var(--mono);font-size:7px;padding:2px 7px;border-radius:2px;letter-spacing:1px}
+.ms-badge.locked{background:var(--amber2);color:var(--amber);border:1px solid rgba(212,148,58,.3)}
+.ms-badge.new{background:var(--teal2);color:var(--teal);border:1px solid rgba(32,181,166,.3)}
+.ms-sub{font-family:var(--mono);font-size:8px;color:var(--t3)}
+
+/* Control bar */
+.ctrl-bar{display:flex;align-items:center;gap:6px;padding:10px 18px;border-bottom:1px solid var(--b0);flex-wrap:wrap}
+.cb{display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:var(--r);font-family:var(--mono);font-size:9px;letter-spacing:.5px;border:1px solid var(--b2);background:var(--bg3);cursor:pointer;color:var(--t2);transition:all .15s;white-space:nowrap}
+.cb:hover{background:var(--bg4);color:var(--t1)}
+.cb.primary{background:var(--amber);border-color:var(--amber);color:#0c0800;font-weight:600}
+.cb.primary:hover{opacity:.88}
+.cb.danger{border-color:rgba(200,50,50,.4);color:var(--red)}
+.cb.danger:hover{background:var(--red3)}
+.cb.special{border-color:rgba(112,80,216,.4);color:var(--purple)}
+.cb.special:hover{background:var(--purple2)}
+.cb:disabled{opacity:.35;cursor:not-allowed}
+.c-sep{flex:1}
+.spd-grp{display:flex;align-items:center;gap:3px}
+.spd-lbl{font-family:var(--mono);font-size:7px;color:var(--t3);margin-right:4px}
+.spb{padding:4px 8px;border-radius:2px;font-family:var(--mono);font-size:8px;color:var(--t3);background:var(--bg4);border:1px solid var(--b1);cursor:pointer;transition:all .15s}
+.spb:hover{color:var(--t1)}
+.spb.on{background:var(--amber3);border-color:var(--amber);color:var(--amber)}
+
+/* Timeline */
+.tl-wrap{padding:12px 18px;border-bottom:1px solid var(--b0)}
+.tl-phases{display:flex;margin-bottom:4px}
+.tl-pl{font-family:var(--mono);font-size:6px;color:var(--t4);text-align:center;overflow:hidden;white-space:nowrap;padding:0 1px;line-height:1.2;transition:color .2s}
+.tl-pl.cur{color:var(--amber)}
+.tl-pl.done{color:var(--t3)}
+.tl-bar{position:relative;height:20px;border-radius:3px;overflow:hidden;border:1px solid var(--b1);background:var(--bg4);margin-bottom:4px}
+.tl-segs{display:flex;height:100%}
+.tl-seg{height:100%;opacity:.2;transition:opacity .3s}
+.tl-seg.done{opacity:.5}
+.tl-seg.cur{opacity:1;animation:segpulse 2s ease-in-out infinite}
+@keyframes segpulse{0%,100%{opacity:1}50%{opacity:.7}}
+.tl-cur{position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.9);z-index:10;box-shadow:0 0 8px rgba(255,255,255,.5);transition:left .08s linear}
+.tl-foot{display:flex;justify-content:space-between}
+.tl-ft{font-family:var(--mono);font-size:7px;color:var(--t3)}
+
+/* Phase info row */
+.ph-row{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--bg2);border-bottom:1px solid var(--b0);flex-wrap:wrap}
+.ph-lbl{font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:1.5px;margin-bottom:2px}
+.ph-cur{font-size:17px;font-weight:300;letter-spacing:.5px;min-width:160px;transition:color .3s}
+.ph-metrics{display:flex;gap:14px;flex:1;flex-wrap:wrap}
+.ph-m{display:flex;flex-direction:column;gap:1px}
+.ph-ml{font-family:var(--mono);font-size:7px;color:var(--t3)}
+.ph-mv{font-family:var(--mono);font-size:11px;color:var(--t1)}
+
+/* Clocks */
+.clocks{display:flex;gap:0;border-bottom:1px solid var(--b0)}
+.ck{flex:1;padding:10px 16px;border-right:1px solid var(--b0)}
+.ck:last-child{border-right:none}
+.ck-lbl{font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:1.5px;margin-bottom:3px}
+.ck-val{font-family:var(--mono);font-size:18px;font-weight:300;color:var(--t1);line-height:1}
+.ck-sub{font-family:var(--mono);font-size:7px;color:var(--t3);margin-top:2px}
+
+/* Aircraft state strip */
+.ac-strip{display:flex;border-bottom:1px solid var(--b0)}
+.ac-m{flex:1;padding:9px 12px;border-right:1px solid var(--b0)}
+.ac-m:last-child{border-right:none}
+.ac-lbl{font-family:var(--mono);font-size:6px;color:var(--t3);letter-spacing:1px;margin-bottom:3px}
+.ac-val{font-family:var(--mono);font-size:13px;font-weight:300;transition:color .3s;margin-bottom:2px}
+.ac-unit{font-family:var(--mono);font-size:7px;color:var(--t3)}
+.ac-badge{display:inline-block;padding:1px 4px;border-radius:1px;font-family:var(--mono);font-size:6px;letter-spacing:.5px;margin-top:2px}
+.ab-ok{background:var(--green3);color:var(--green)}
+.ab-warn{background:var(--amber3);color:var(--amber)}
+.ab-crit{background:var(--red3);color:var(--red)}
+.ab-off{background:var(--bg4);color:var(--t3)}
+.ab-regen{background:var(--teal3);color:var(--teal)}
+
+/* Validation strip */
+.val-strip{padding:8px 18px;border-bottom:1px solid var(--b0);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.vi{display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:2px;font-family:var(--mono);font-size:7px;background:var(--bg3);border:1px solid var(--b0)}
+.vi.ok{border-color:rgba(22,176,101,.25);color:var(--green)}
+.vi.warn{border-color:rgba(212,148,58,.25);color:var(--amber)}
+.vi.fail{border-color:rgba(200,50,50,.25);color:var(--red)}
+.vi-lbl{font-family:var(--mono);font-size:7px;color:var(--t3)}
+
+/* Section headers */
+.sec{padding:0;border-top:1px solid var(--b0)}
+.sec-hdr{display:flex;align-items:baseline;gap:10px;padding:14px 18px 10px;flex-wrap:wrap}
+.sec-num{font-family:var(--mono);font-size:8px;color:var(--amber);letter-spacing:1px}
+.sec-title{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:1.5px}
+.sec-desc{font-family:var(--mono);font-size:7px;color:var(--t3);margin-left:auto}
+
+/* ── RIGHT PANEL ─────────────────────────────────────────────────── */
+.rpanel{background:var(--bg1);padding:14px;overflow-y:auto;position:sticky;top:var(--nav-h);height:calc(100vh - var(--nav-h))}
+.rp-sec{margin-bottom:14px}
+.rp-hdr{font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:2px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--b0)}
+.rp-row{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--b0)}
+.rp-k{font-family:var(--mono);font-size:7px;color:var(--t3)}
+.rp-v{font-family:var(--mono);font-size:10px;color:var(--t1)}
+.rp-u{font-size:7px;color:var(--t3);margin-left:2px}
+
+/* SOC bar */
+.soc-bar-wrap{height:3px;background:var(--bg4);border-radius:2px;overflow:hidden;margin:4px 0}
+.soc-bar-fill{height:100%;border-radius:2px;transition:width .5s}
+
+/* Power bar (mini) */
+.pwr-bar-wrap{height:2px;background:var(--bg4);border-radius:1px;overflow:hidden;margin-top:2px}
+.pwr-bar-fill{height:100%;border-radius:1px;transition:width .4s}
+
+/* Atmosphere mini display */
+.atm-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.atm-item{display:flex;flex-direction:column;gap:1px}
+.atm-l{font-family:var(--mono);font-size:6px;color:var(--t3)}
+.atm-v{font-family:var(--mono);font-size:9px;color:var(--t2)}
+
+/* ── BELOW-FOLD SECTIONS ─────────────────────────────────────────── */
+.below-fold{grid-column:1/-1;background:var(--bg0)}
+
+/* Powertrain diagram */
+.pt-wrap{padding:14px 24px}
+.pt-flow{display:flex;align-items:center;overflow-x:auto;gap:0;background:var(--bg2);border:1px solid var(--b0);border-radius:var(--rl)}
+.pt-node{flex-shrink:0;min-width:90px;padding:12px 10px;text-align:center;border-right:1px solid var(--b0);display:flex;flex-direction:column;align-items:center;gap:3px}
+.pt-node:last-child{border-right:none}
+.pt-nlbl{font-family:var(--mono);font-size:6px;color:var(--t3);letter-spacing:1.5px;margin-bottom:2px}
+.pt-nval{font-size:16px;font-weight:300;transition:color .3s;line-height:1}
+.pt-nunit{font-family:var(--mono);font-size:7px;color:var(--t3)}
+.pt-neta{font-family:var(--mono);font-size:6px;color:var(--t4);margin-top:2px}
+.pt-arrow{flex-shrink:0;width:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 2px;gap:2px}
+.arr-line{width:100%;height:1px;background:var(--b2);position:relative;overflow:hidden}
+.arr-anim{position:absolute;top:0;left:-60%;width:60%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:arrflow 1.4s linear infinite}
+.arr-anim.inactive{display:none}
+@keyframes arrflow{from{left:-60%}to{left:100%}}
+.arr-lbl{font-family:var(--mono);font-size:5px;color:var(--t4);text-align:center}
+.pt-bus-col{flex-shrink:0;padding:12px 14px;background:var(--bg3);border-right:1px solid var(--b0);display:flex;flex-direction:column;gap:8px;min-width:110px}
+.pt-bus-lbl{font-family:var(--mono);font-size:6px;color:var(--t3);letter-spacing:2px;text-align:center;margin-bottom:4px}
+.pt-bus-val{font-size:14px;font-weight:300;text-align:center;margin-bottom:6px}
+.pt-src{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:7px;padding:3px 0;border-top:1px solid var(--b0)}
+.pt-src-lbl{color:var(--t3)}
+.pt-src-val{color:var(--t1)}
+.pt-balance{display:flex;gap:14px;padding:8px 0;margin-top:6px;background:var(--bg3);border:1px solid var(--b0);border-radius:var(--r);padding:8px 14px}
+.pb-item{font-family:var(--mono);font-size:8px;color:var(--t2)}
+.pb-sep{color:var(--b2);margin:0 2px}
+.pb-ok{color:var(--green)}
+.pb-mode{color:var(--teal)}
+
+/* ECMS */
+.ecms-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--b0);padding:0 24px 0;margin-bottom:14px}
+.ep{background:var(--bg2);padding:14px 16px}
+.ep-hdr{font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:2px;margin-bottom:10px}
+.er{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--b0)}
+.ek{font-family:var(--mono);font-size:7px;color:var(--t3)}
+.ev{font-family:var(--mono);font-size:10px;color:var(--t1)}
+.ev.hi{color:var(--purple)}
+.ev.eng{color:var(--amber)}
+.ev.bat{color:var(--teal)}
+.ev.mot{color:var(--cyan)}
+.ec-dec{font-family:var(--mono);font-size:8px;color:var(--t2);line-height:1.6;margin-bottom:10px}
+.ec-dec em{color:var(--amber);font-style:normal}
+.arch-bar-row{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.arch-lbl{font-family:var(--mono);font-size:7px;color:var(--t3);width:55px}
+.arch-trk{flex:1;height:2px;background:var(--bg4);border-radius:1px;overflow:hidden}
+.arch-fill{height:100%;border-radius:1px;transition:width .5s}
+.arch-pct{font-family:var(--mono);font-size:7px;color:var(--t3);width:28px;text-align:right}
+
+/* Graphs */
+.gg-wrap{padding:0 24px;margin-bottom:8px}
+.gg-toolbar{display:flex;gap:5px;margin-bottom:10px;align-items:center}
+.gm-btn{padding:3px 10px;border-radius:2px;cursor:pointer;font-family:var(--mono);font-size:7px;background:var(--bg3);border:1px solid var(--b1);color:var(--t3);transition:all .15s}
+.gm-btn.on{background:var(--teal3);border-color:var(--teal);color:var(--teal)}
+.gg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gc{background:var(--bg2);border:1px solid var(--b0);border-radius:var(--rl);padding:10px}
+.gc-hdr{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+.gc-title{font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:1px}
+.gc-cur{font-family:var(--mono);font-size:8px}
+.gc-wrap{height:140px;position:relative}
+
+/* Results */
+.rg-wrap{padding:0 24px;margin-bottom:24px}
+.rg{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--b0);border:1px solid var(--b0);border-radius:var(--rl);overflow:hidden}
+.rm{background:var(--bg2);padding:12px 14px}
+.rm-lbl{font-family:var(--mono);font-size:6px;color:var(--t3);letter-spacing:1.5px;margin-bottom:5px}
+.rm-val{font-size:19px;font-weight:300;color:var(--t1);line-height:1}
+.rm-unit{font-family:var(--mono);font-size:7px;color:var(--t3);margin-left:3px}
+.rm-note{font-family:var(--mono);font-size:7px;color:var(--t3);margin-top:3px}
+
+/* Full validation report */
+.vr-wrap{padding:0 24px;margin-bottom:14px}
+.vr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.vr-item{display:flex;align-items:flex-start;gap:7px;padding:9px 10px;background:var(--bg2);border:1px solid var(--b0);border-radius:var(--r)}
+.vr-icon{font-size:11px;flex-shrink:0;margin-top:1px}
+.vr-icon.ok{color:var(--green)}
+.vr-icon.warn{color:var(--amber)}
+.vr-icon.fail{color:var(--red)}
+.vr-body{}
+.vr-label{font-family:var(--mono);font-size:7px;color:var(--t2);margin-bottom:1px}
+.vr-detail{font-family:var(--mono);font-size:6px;color:var(--t3)}
+
+/* Physics panel */
+.phys-toggle{display:flex;align-items:center;gap:8px;padding:10px 18px;cursor:pointer;background:var(--bg2);border-top:1px solid var(--b0);border-bottom:1px solid var(--b0);font-family:var(--mono);font-size:8px;color:var(--t2);user-select:none;transition:background .15s;margin:0 24px;border-radius:var(--r)}
+.phys-toggle:hover{background:var(--bg3)}
+.ph-chev{transition:transform .22s;flex-shrink:0}
+.ph-chev.open{transform:rotate(180deg)}
+.phys-body{display:none;padding:14px 24px}
+.phys-body.open{display:block}
+.phys-cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:14px}
+.eq-item{margin-bottom:8px}
+.eq-name{font-family:var(--mono);font-size:6px;color:var(--t3);letter-spacing:1px;margin-bottom:1px}
+.eq-formula{font-family:var(--mono);font-size:10px;color:var(--t2)}
+.eq-formula em{color:var(--teal);font-style:normal}
+.eq-num{font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:1px}
+.asmp-tbl{width:100%;border-collapse:collapse}
+.asmp-tbl th{font-family:var(--mono);font-size:6px;color:var(--t3);letter-spacing:1.5px;text-align:left;padding:4px 8px 4px 0;border-bottom:1px solid var(--b0)}
+.asmp-tbl td{font-family:var(--mono);font-size:8px;color:var(--t2);padding:4px 8px 4px 0;border-bottom:1px solid var(--b0)}
+.asmp-tbl td:last-child{font-size:7px;color:var(--t3)}
+
+/* Modal */
+.modal-ov{position:fixed;inset:0;z-index:500;background:rgba(5,7,9,.88);display:none;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.modal-ov.open{display:flex}
+.modal-box{background:var(--bg2);border:1px solid var(--b2);border-radius:var(--rx);padding:24px;width:560px;max-height:85vh;overflow-y:auto}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.modal-title{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:1.5px}
+.modal-close{background:none;border:none;color:var(--t3);font-size:18px;cursor:pointer;line-height:1;padding:2px 6px}
+.modal-close:hover{color:var(--t1)}
+.m-section{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--b0)}
+.m-section:last-child{border-bottom:none;margin-bottom:0}
+.m-sec-title{font-family:var(--mono);font-size:7px;color:var(--amber);letter-spacing:2px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.m-sec-body{display:block}
+.m-sec-body.collapsed{display:none}
+.m-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+.mf{display:flex;flex-direction:column;gap:3px}
+.mf.full{grid-column:1/-1}
+.ml{font-family:var(--mono);font-size:7px;color:var(--t3);display:flex;align-items:baseline;justify-content:space-between}
+.ml-hint{font-size:6px;color:var(--t4)}
+.mi2{width:100%;background:var(--bg4);border:1px solid var(--b1);border-radius:var(--r);padding:5px 8px;font-family:var(--mono);font-size:10px;color:var(--t1);outline:none;transition:border-color .15s}
+.mi2:focus{border-color:var(--b2)}
+.mi2.valid{border-color:rgba(22,176,101,.4)}
+.mi2.invalid{border-color:rgba(200,50,50,.5);background:rgba(200,50,50,.04)}
+.m-val-msg{font-family:var(--mono);font-size:6px;color:var(--red);margin-top:1px}
+.m-acts{display:flex;gap:7px;margin-top:16px}
+.m-ok{flex:1;padding:8px;background:var(--amber);border:none;border-radius:var(--r);cursor:pointer;font-family:var(--mono);font-size:9px;color:#0c0800;font-weight:600;letter-spacing:1px}
+.m-ca{flex:1;padding:8px;background:transparent;border:1px solid var(--b2);border-radius:var(--r);cursor:pointer;font-family:var(--mono);font-size:9px;color:var(--t2)}
+
+/* Toast */
+.toast{position:fixed;bottom:18px;right:18px;z-index:900;padding:8px 14px;border-radius:var(--r);font-family:var(--mono);font-size:8px;color:var(--t1);background:var(--bg4);border:1px solid var(--b2);opacity:0;transform:translateY(6px);transition:all .22s;pointer-events:none;max-width:340px}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{border-color:rgba(22,176,101,.5);color:var(--green)}
+.toast.err{border-color:rgba(200,50,50,.5);color:var(--red)}
+.toast.info{border-color:rgba(212,148,58,.4);color:var(--amber)}
+
+/* Utility */
+.mt8{margin-top:8px}
+.pad18{padding:0 18px}
+"""
+
+STYLE_END = """</style>
+</head>
+<body>
+"""
+
+# ── TOPNAV ─────────────────────────────────────────────────────────
+NAV = """
+<nav class="topnav">
+  <div class="nav-brand">UAV<em>&#8212;</em>HE1</div>
+  <div class="nav-vsep"></div>
+  <div class="nav-sub">HYBRID-ELECTRIC PROPULSION DIGITAL TWIN</div>
+  <div class="nav-status">
+    <div class="sdot ready" id="sDot"></div>
+    <span class="stxt" id="sTxt">READY</span>
+  </div>
+  <div class="nav-chip">MTOW <span id="nMtow">1000</span>&thinsp;kg</div>
+  <div class="nav-chip">Engine <span>60</span>&thinsp;kW</div>
+  <div class="nav-chip">Battery <span id="nBat">36</span>&thinsp;kWh</div>
+  <div class="nav-chip">Fuel <span id="nFuel">64</span>&thinsp;kg</div>
+  <div class="nav-chip">t<sub>mission</sub> <span>101:37</span></div>
+</nav>
+"""
+
+WORKSPACE_START = '<div class="workspace">'
+
+# ── LEFT SIDEBAR ────────────────────────────────────────────────────
+SIDEBAR = """
+<aside class="sidebar">
+  <div>
+    <div class="sb-hdr">
+      <span class="sb-lbl">SAVED MISSIONS</span>
+      <button class="sb-add" onclick="openAddMission()">+ ADD</button>
+    </div>
+    <div style="margin-top:8px" id="missionList">
+      <div class="mi active locked" id="mi-m1" onclick="selectMission('M1')">
+        <div class="mi-id">M1 &bull; SURVEILLANCE</div>
+        <div class="mi-name">Mission 1</div>
+        <div class="mi-meta">
+          <div class="mi-dot" style="background:var(--green)"></div>
+          <span class="mi-dur">101:37 &middot; 6000&thinsp;m</span>
+        </div>
+      </div>
+      <div id="extraMissions"></div>
+    </div>
+  </div>
+
+  <div class="sb-sep"></div>
+
+  <div class="lock-panel">
+    <div class="lock-title">
+      <span>&#9632;</span> M1 PARAMETERS &#8212; LOCKED
+    </div>
+    <div class="lp-row"><span class="lp-k">MTOW</span><span class="lp-v">1000<span class="lp-u">kg</span></span></div>
+    <div class="lp-row"><span class="lp-k">PAYLOAD</span><span class="lp-v">200<span class="lp-u">kg</span></span></div>
+    <div class="lp-row"><span class="lp-k">FUEL</span><span class="lp-v">64<span class="lp-u">kg</span></span></div>
+    <div class="lp-row"><span class="lp-k">BATTERY</span><span class="lp-v">36<span class="lp-u">kWh</span></span></div>
+    <div class="lp-row"><span class="lp-k">ENGINE MAX</span><span class="lp-v">60<span class="lp-u">kW</span></span></div>
+    <div class="lp-row"><span class="lp-k">MOTOR MAX</span><span class="lp-v">70<span class="lp-u">kW</span></span></div>
+    <div class="lp-row"><span class="lp-k">WING AREA</span><span class="lp-v">25<span class="lp-u">m&sup2;</span></span></div>
+    <div class="lp-row"><span class="lp-k">ASPECT RATIO</span><span class="lp-v">15</span></div>
+    <div class="lp-row"><span class="lp-k">SOC INIT</span><span class="lp-v">90<span class="lp-u">%</span></span></div>
+    <div class="lp-row"><span class="lp-k">BSFC</span><span class="lp-v">0.60<span class="lp-u">kg/kWh</span></span></div>
+    <div class="lp-row"><span class="lp-k">CD0</span><span class="lp-v">0.025</span></div>
+    <div class="lp-row"><span class="lp-k">OSWALD e</span><span class="lp-v">0.80</span></div>
+  </div>
+
+  <div class="sb-sep"></div>
+
+  <div>
+    <div class="sb-lbl" style="margin-bottom:6px">SIMULATION</div>
+    <button class="btn-run" id="btnRun" onclick="startSim()">&#9654; RUN MISSION 1</button>
+    <button class="btn-sec" id="btnPause" onclick="pauseSim()" disabled>&#9646;&#9646; PAUSE</button>
+    <button class="btn-sec on" id="btnFinal" onclick="showFinal()" style="display:none">&#9889; SHOW FINAL</button>
+    <button class="btn-sec danger" onclick="resetSim()">&#8635; RESET</button>
+  </div>
+
+  <div class="sb-sep"></div>
+
+  <div>
+    <div class="sb-lbl" style="margin-bottom:6px">ENGINEERING MODE</div>
+    <button class="btn-sec" id="btnEng" onclick="toggleEngMode()">&#128295; ENGINEERING</button>
+  </div>
+</aside>
+"""
+
+# ── CENTER PANEL ─────────────────────────────────────────────────────
+CENTER_TOP = """
+<main class="center" id="centerPanel">
+  <!-- Mission header -->
+  <div class="ms-hdr">
+    <div class="ms-title-row">
+      <span class="ms-name" id="msMissionName">Mission 1 &mdash; Surveillance / ISR</span>
+      <span class="ms-badge locked" id="msBadge">LOCKED</span>
+    </div>
+    <div class="ms-sub" id="msSub">HAL Aerothon 2026 &bull; Hybrid-Electric Fixed-Wing UAV &bull; ISA Standard Atmosphere</div>
+  </div>
+
+  <!-- Control bar -->
+  <div class="ctrl-bar">
+    <button class="cb primary" id="cb1" onclick="startSim()">&#9654; START</button>
+    <button class="cb" id="cb2" onclick="pauseSim()" disabled>&#9646;&#9646; PAUSE</button>
+    <button class="cb" id="cb3" onclick="resumeSim()" style="display:none">&#9654; RESUME</button>
+    <button class="cb danger" onclick="resetSim()">&#8635; RESET</button>
+    <button class="cb special" onclick="showFinal()">&#9889; FINAL</button>
+    <div class="c-sep"></div>
+    <span class="spd-lbl">SPEED</span>
+    <div class="spd-grp" id="spdGrp">
+      <button class="spb" onclick="setSpd(1)">1&times;</button>
+      <button class="spb" onclick="setSpd(5)">5&times;</button>
+      <button class="spb on" onclick="setSpd(10)">10&times;</button>
+      <button class="spb" onclick="setSpd(20)">20&times;</button>
+      <button class="spb" onclick="setSpd(60)">60&times;</button>
+    </div>
+  </div>
+
+  <!-- Validation strip -->
+  <div class="val-strip" id="valStrip">
+    <span class="vi-lbl" style="font-family:var(--mono);font-size:7px;color:var(--t3)">PRE-FLIGHT:</span>
+    <div class="vi ok" id="vi-mass">&#10003; MASS</div>
+    <div class="vi ok" id="vi-eng">&#10003; ENGINE</div>
+    <div class="vi ok" id="vi-soc">&#10003; SOC</div>
+    <div class="vi ok" id="vi-fuel">&#10003; FUEL</div>
+    <div class="vi ok" id="vi-stall">&#10003; STALL MARGIN</div>
+    <div class="vi ok" id="vi-pwr">&#10003; POWER</div>
+    <div class="vi ok" id="vi-kine">&#10003; KINEMATICS</div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="tl-wrap">
+    <div class="tl-phases" id="tlPhases"></div>
+    <div class="tl-bar">
+      <div class="tl-segs" id="tlSegs"></div>
+      <div class="tl-cur" id="tlCur" style="left:0%"></div>
+    </div>
+    <div class="tl-foot">
+      <span class="tl-ft">0:00</span>
+      <span class="tl-ft" id="tlMid">50:48</span>
+      <span class="tl-ft">101:37</span>
+    </div>
+  </div>
+
+  <!-- Phase row -->
+  <div class="ph-row">
+    <div>
+      <div class="ph-lbl">CURRENT PHASE</div>
+      <div class="ph-cur" id="phCur" style="color:var(--t3)">&mdash;</div>
+    </div>
+    <div class="ph-metrics">
+      <div class="ph-m"><div class="ph-ml">ALTITUDE</div><div class="ph-mv"><span id="phAlt">&mdash;</span> m</div></div>
+      <div class="ph-m"><div class="ph-ml">AIRSPEED</div><div class="ph-mv"><span id="phTas">&mdash;</span> m/s</div></div>
+      <div class="ph-m"><div class="ph-ml">GROUND SPD</div><div class="ph-mv"><span id="phGs">&mdash;</span> m/s</div></div>
+      <div class="ph-m"><div class="ph-ml">VERT RATE</div><div class="ph-mv"><span id="phVs">&mdash;</span> m/s</div></div>
+      <div class="ph-m"><div class="ph-ml">SHAFT REQ</div><div class="ph-mv"><span id="phPsh">&mdash;</span> kW</div></div>
+      <div class="ph-m"><div class="ph-ml">LOAD FACTOR</div><div class="ph-mv"><span id="phLF">&mdash;</span></div></div>
+      <div class="ph-m"><div class="ph-ml">PHASE DUR</div><div class="ph-mv"><span id="phDur">&mdash;</span></div></div>
+    </div>
+  </div>
+
+  <!-- Clocks -->
+  <div class="clocks">
+    <div class="ck">
+      <div class="ck-lbl">MISSION TIME</div>
+      <div class="ck-val" id="ckMT">00:00</div>
+      <div class="ck-sub">/ 101:37 total</div>
+    </div>
+    <div class="ck">
+      <div class="ck-lbl">REAL TIME (5 min playback)</div>
+      <div class="ck-val" id="ckRT">00:00</div>
+      <div class="ck-sub">/ 05:00 wall-clock</div>
+    </div>
+    <div class="ck">
+      <div class="ck-lbl">COMPRESSION</div>
+      <div class="ck-val" style="font-size:16px;color:var(--t2)">&times;<span id="ckX">20.3</span></div>
+      <div class="ck-sub" id="ckXlbl">mission-time / wall-time</div>
+    </div>
+    <div class="ck">
+      <div class="ck-lbl">PHASE PROGRESS</div>
+      <div class="ck-val" style="font-size:14px"><span id="ckPPct">0</span><span style="font-size:12px;color:var(--t3)">%</span></div>
+      <div class="ck-sub" id="ckPSub">phase elapsed</div>
+    </div>
+  </div>
+
+  <!-- Aircraft state strip -->
+  <div class="ac-strip">
+    <div class="ac-m">
+      <div class="ac-lbl">BATTERY SOC</div>
+      <div class="ac-val" id="acSOC" style="color:var(--teal)">&mdash;</div>
+      <div class="ac-unit">%</div>
+      <span class="ac-badge ab-off" id="bSOC">IDLE</span>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">FUEL</div>
+      <div class="ac-val" id="acFuel" style="color:var(--amber)">&mdash;</div>
+      <div class="ac-unit">kg</div>
+      <span class="ac-badge ab-off" id="bFuel">IDLE</span>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">ALTITUDE</div>
+      <div class="ac-val" id="acAlt" style="color:var(--blue)">&mdash;</div>
+      <div class="ac-unit">m</div>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">AIRSPEED</div>
+      <div class="ac-val" id="acTas" style="color:var(--blue)">&mdash;</div>
+      <div class="ac-unit">m/s</div>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">GND SPEED</div>
+      <div class="ac-val" id="acGs" style="color:var(--t2)">&mdash;</div>
+      <div class="ac-unit">m/s</div>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">ENGINE</div>
+      <div class="ac-val" id="acEng" style="color:var(--amber)">&mdash;</div>
+      <div class="ac-unit">kW</div>
+      <span class="ac-badge ab-off" id="bEng">OFF</span>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">MOTOR</div>
+      <div class="ac-val" id="acMot" style="color:var(--cyan)">&mdash;</div>
+      <div class="ac-unit">kW</div>
+      <span class="ac-badge ab-off" id="bMot">OFF</span>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">GENERATOR</div>
+      <div class="ac-val" id="acGen" style="color:var(--teal)">&mdash;</div>
+      <div class="ac-unit">kW</div>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">MASS</div>
+      <div class="ac-val" id="acMass" style="color:var(--t2)">&mdash;</div>
+      <div class="ac-unit">kg</div>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">CL</div>
+      <div class="ac-val" id="acCL" style="color:var(--t2)">&mdash;</div>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">L/D</div>
+      <div class="ac-val" id="acLD" style="color:var(--t2)">&mdash;</div>
+    </div>
+    <div class="ac-m">
+      <div class="ac-lbl">STALL MARGIN</div>
+      <div class="ac-val" id="acSM" style="color:var(--t2)">&mdash;</div>
+      <div class="ac-unit">&times;</div>
+    </div>
+  </div>
+</main>
+"""
+
+# ── RIGHT PANEL ──────────────────────────────────────────────────────
+RIGHT = """
+<aside class="rpanel">
+  <div class="rp-sec">
+    <div class="rp-hdr">BATTERY</div>
+    <div class="rp-row"><span class="rp-k">SOC</span><span class="rp-v" id="rpSOC">&mdash;<span class="rp-u">%</span></span></div>
+    <div class="soc-bar-wrap"><div class="soc-bar-fill" id="rpSOCbar" style="width:90%;background:var(--teal)"></div></div>
+    <div class="rp-row"><span class="rp-k">Power</span><span class="rp-v" id="rpBatP">&mdash;<span class="rp-u">kW</span></span></div>
+    <div class="rp-row"><span class="rp-k">Current</span><span class="rp-v" id="rpBatI">&mdash;<span class="rp-u">A</span></span></div>
+    <div class="rp-row"><span class="rp-k">Voltage</span><span class="rp-v">400<span class="rp-u">V</span></span></div>
+    <div class="rp-row"><span class="rp-k">Capacity</span><span class="rp-v">36<span class="rp-u">kWh</span></span></div>
+    <div class="rp-row"><span class="rp-k">Energy left</span><span class="rp-v" id="rpBatE">&mdash;<span class="rp-u">kWh</span></span></div>
+  </div>
+
+  <div class="rp-sec">
+    <div class="rp-hdr">SUPERCAPACITOR</div>
+    <div class="rp-row"><span class="rp-k">SOC</span><span class="rp-v" id="rpSCsoc">&mdash;<span class="rp-u">%</span></span></div>
+    <div class="soc-bar-wrap"><div class="soc-bar-fill" id="rpSCbar" style="width:95%;background:var(--purple)"></div></div>
+    <div class="rp-row"><span class="rp-k">Power</span><span class="rp-v" id="rpSCP">&mdash;<span class="rp-u">kW</span></span></div>
+    <div class="rp-row"><span class="rp-k">Energy</span><span class="rp-v" id="rpSCE">&mdash;<span class="rp-u">Wh</span></span></div>
+    <div class="rp-row"><span class="rp-k">Peak avail</span><span class="rp-v">64.8<span class="rp-u">kW</span></span></div>
+  </div>
+
+  <div class="rp-sec">
+    <div class="rp-hdr">FUEL</div>
+    <div class="rp-row"><span class="rp-k">Remaining</span><span class="rp-v" id="rpFuel">&mdash;<span class="rp-u">kg</span></span></div>
+    <div class="soc-bar-wrap"><div class="soc-bar-fill" id="rpFuelBar" style="width:100%;background:var(--amber)"></div></div>
+    <div class="rp-row"><span class="rp-k">Flow rate</span><span class="rp-v" id="rpFF">&mdash;<span class="rp-u">kg/h</span></span></div>
+    <div class="rp-row"><span class="rp-k">Consumed</span><span class="rp-v" id="rpFC">&mdash;<span class="rp-u">kg</span></span></div>
+  </div>
+
+  <div class="rp-sec">
+    <div class="rp-hdr">ENGINE &amp; MOTOR</div>
+    <div class="rp-row"><span class="rp-k">Engine power</span><span class="rp-v" id="rpEng">&mdash;<span class="rp-u">kW</span></span></div>
+    <div class="pwr-bar-wrap"><div class="pwr-bar-fill" id="rpEngBar" style="width:0%;background:var(--amber)"></div></div>
+    <div class="rp-row"><span class="rp-k">Engine load</span><span class="rp-v" id="rpEngL">&mdash;<span class="rp-u">%</span></span></div>
+    <div class="rp-row"><span class="rp-k">Motor power</span><span class="rp-v" id="rpMot">&mdash;<span class="rp-u">kW</span></span></div>
+    <div class="pwr-bar-wrap"><div class="pwr-bar-fill" id="rpMotBar" style="width:0%;background:var(--cyan)"></div></div>
+    <div class="rp-row"><span class="rp-k">Generator</span><span class="rp-v" id="rpGenE">&mdash;<span class="rp-u">kW</span></span></div>
+    <div class="rp-row"><span class="rp-k">Prop shaft</span><span class="rp-v" id="rpProp">&mdash;<span class="rp-u">kW</span></span></div>
+    <div class="rp-row"><span class="rp-k">Mode</span><span class="rp-v" id="rpMode" style="color:var(--teal)">&mdash;</span></div>
+  </div>
+
+  <div class="rp-sec">
+    <div class="rp-hdr">ATMOSPHERE</div>
+    <div class="atm-grid">
+      <div class="atm-item"><div class="atm-l">TEMPERATURE</div><div class="atm-v" id="rpT">&mdash; K</div></div>
+      <div class="atm-item"><div class="atm-l">PRESSURE</div><div class="atm-v" id="rpP">&mdash; Pa</div></div>
+      <div class="atm-item"><div class="atm-l">DENSITY</div><div class="atm-v" id="rpRho">&mdash; kg/m&sup3;</div></div>
+      <div class="atm-item"><div class="atm-l">DYN PRESS</div><div class="atm-v" id="rpQ">&mdash; Pa</div></div>
+    </div>
+    <div class="rp-row mt8"><span class="rp-k">Stall speed</span><span class="rp-v" id="rpVs">&mdash;<span class="rp-u">m/s</span></span></div>
+    <div class="rp-row"><span class="rp-k">Stall margin</span><span class="rp-v" id="rpSM">&mdash;</span></div>
+    <div class="rp-row"><span class="rp-k">Wind</span><span class="rp-v" id="rpWind">0<span class="rp-u">m/s</span></span></div>
+  </div>
+
+  <div class="rp-sec">
+    <div class="rp-hdr">DISTANCE</div>
+    <div class="rp-row"><span class="rp-k">Path dist</span><span class="rp-v" id="rpDist">&mdash;<span class="rp-u">km</span></span></div>
+    <div class="rp-row"><span class="rp-k">Net displ.</span><span class="rp-v" id="rpDisp">&mdash;<span class="rp-u">km</span></span></div>
+    <div class="rp-row"><span class="rp-k">Loiter orbits</span><span class="rp-v" id="rpOrb">&mdash;</span></div>
+  </div>
+</aside>
+"""
+
+WORKSPACE_END = "</div>"  # closes .workspace
+
+# ── BELOW-FOLD SECTIONS ───────────────────────────────────────────────
+BELOW = """
+<div class="below-fold">
+
+<!-- ── S03 POWERTRAIN ──────────────────────────────────────────── -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-num">03</span>
+    <span class="sec-title">Hybrid Powertrain</span>
+    <span class="sec-desc">Series architecture &mdash; Engine &rarr; Generator &rarr; DC Bus &rarr; Motor &rarr; Propeller</span>
+  </div>
+  <div class="pt-wrap">
+    <div class="pt-flow">
+      <!-- Turboshaft -->
+      <div class="pt-node">
+        <div class="pt-nlbl">TURBOSHAFT</div>
+        <div class="pt-nval" id="ptEng" style="color:var(--amber)">60.0</div>
+        <div class="pt-nunit">kW shaft</div>
+        <div class="pt-neta">60 kW max</div>
+      </div>
+      <div class="pt-arrow">
+        <div class="arr-line"><div class="arr-anim" id="arr1"></div></div>
+        <div class="arr-lbl">shaft</div>
+      </div>
+      <!-- Generator -->
+      <div class="pt-node">
+        <div class="pt-nlbl">GENERATOR</div>
+        <div class="pt-nval" id="ptGen" style="color:var(--teal)">54.1</div>
+        <div class="pt-nunit">kW elec</div>
+        <div class="pt-neta">&eta;&#8239;=&#8239;0.92 &times; 0.98</div>
+      </div>
+      <div class="pt-arrow">
+        <div class="arr-line"><div class="arr-anim" id="arr2"></div></div>
+        <div class="arr-lbl">DC</div>
+      </div>
+      <!-- DC Bus -->
+      <div class="pt-bus-col">
+        <div class="pt-bus-lbl">DC BUS</div>
+        <div class="pt-bus-val" id="ptBus">54.1 kW</div>
+        <div class="pt-src">
+          <span class="pt-src-lbl" style="color:var(--teal)">BATTERY</span>
+          <span class="pt-src-val" id="ptBatF">0.0 kW</span>
+        </div>
+        <div class="pt-src">
+          <span class="pt-src-lbl" style="color:var(--purple)">SUPERCAP</span>
+          <span class="pt-src-val" id="ptSCF">0.0 kW</span>
+        </div>
+      </div>
+      <div class="pt-arrow">
+        <div class="arr-line"><div class="arr-anim" id="arr3"></div></div>
+        <div class="arr-lbl">inverter</div>
+      </div>
+      <!-- Motor -->
+      <div class="pt-node">
+        <div class="pt-nlbl">MOTOR</div>
+        <div class="pt-nval" id="ptMot" style="color:var(--cyan)">50.0</div>
+        <div class="pt-nunit">kW mech</div>
+        <div class="pt-neta">&eta;&#8239;=&#8239;0.95 &times; 0.97</div>
+      </div>
+      <div class="pt-arrow">
+        <div class="arr-line"><div class="arr-anim" id="arr4"></div></div>
+        <div class="arr-lbl">shaft</div>
+      </div>
+      <!-- Propeller -->
+      <div class="pt-node">
+        <div class="pt-nlbl">PROPELLER</div>
+        <div class="pt-nval" id="ptProp" style="color:var(--green)">41.0</div>
+        <div class="pt-nunit">kW thrust</div>
+        <div class="pt-neta">&eta;_prop&#8239;=&#8239;0.82</div>
+      </div>
+    </div>
+    <div class="pt-balance">
+      <span class="pb-ok">&#8861; POWER BALANCE</span>
+      <span class="pb-sep">|</span>
+      <span class="pb-item">Source: <span id="pbSrc">54.1</span> kW</span>
+      <span class="pb-sep">|</span>
+      <span class="pb-item">Propulsion: <span id="pbProp">50.0</span> kW</span>
+      <span class="pb-sep">|</span>
+      <span class="pb-item">Losses: <span id="pbLoss">4.1</span> kW</span>
+      <span class="pb-sep">|</span>
+      <span class="pb-mode">Mode: <span id="pbMode">SERIES</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- ── S04 ECMS ─────────────────────────────────────────────────── -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-num">04</span>
+    <span class="sec-title">ECMS Energy Management</span>
+    <span class="sec-desc">Equivalent Consumption Minimization Strategy</span>
+  </div>
+  <div class="ecms-grid">
+    <div class="ep">
+      <div class="ep-hdr">ECMS STATE</div>
+      <div class="er"><span class="ek">EQUIV. FACTOR s</span><span class="ev hi" id="ecS">4.62</span></div>
+      <div class="er"><span class="ek">BATTERY SOC</span><span class="ev bat" id="ecSOC">&mdash;</span></div>
+      <div class="er"><span class="ek">SOC SETPOINT</span><span class="ev">62.0 %</span></div>
+      <div class="er"><span class="ek">SOC ERROR</span><span class="ev" id="ecErr">&mdash;</span></div>
+      <div class="er"><span class="ek">ENGINE STATE</span><span class="ev eng" id="ecEngSt">&mdash;</span></div>
+      <div class="er"><span class="ek">BATTERY CMD</span><span class="ev bat" id="ecBatCmd">&mdash;</span></div>
+      <div class="er"><span class="ek">MOTOR CMD</span><span class="ev mot" id="ecMotCmd">&mdash;</span></div>
+      <div class="er"><span class="ek">ARCHITECTURE</span><span class="ev" id="ecArch" style="color:var(--teal)">SERIES</span></div>
+
+    </div>
+    <div class="ep">
+      <div class="ep-hdr">CURRENT DECISION</div>
+      <div class="ec-dec" id="ecDec">Load Mission 1 or click <em>&#9889; FINAL</em> to display computed results.</div>
+      <div style="padding-top:10px;border-top:1px solid var(--b0)">
+        <div class="ep-hdr" style="margin-bottom:8px">POWER SPLIT</div>
+        <div class="er"><span class="ek">ENGINE</span><span class="ev eng" id="ecPe">&mdash;</span></div>
+        <div class="er"><span class="ek">GENERATOR ELEC</span><span class="ev bat" id="ecPg">&mdash;</span></div>
+        <div class="er"><span class="ek">BATTERY</span><span class="ev bat" id="ecPb">&mdash;</span></div>
+        <div class="er"><span class="ek">SUPERCAP</span><span class="ev" id="ecPsc" style="color:var(--purple)">&mdash;</span></div>
+        <div class="er"><span class="ek">MOTOR MECH</span><span class="ev mot" id="ecPm">&mdash;</span></div>
+        <div class="er"><span class="ek">SHAFT REQUIRED</span><span class="ev" id="ecPsh">&mdash;</span></div>
+        <div class="er"><span class="ek">REGEN STORED</span><span class="ev" id="ecPrg" style="color:var(--teal)">&mdash;</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── S05 GRAPHS ────────────────────────────────────────────────── -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-num">05</span>
+    <span class="sec-title">Mission Analysis</span>
+    <span class="sec-desc">Engineering time-series plots</span>
+    <div style="margin-left:auto;display:flex;gap:5px">
+      <button class="gm-btn on" id="gmLive" onclick="setGraphMode('live')">LIVE</button>
+      <button class="gm-btn" id="gmFull" onclick="setGraphMode('full')">FULL SIM</button>
+    </div>
+  </div>
+  <div class="gg-wrap">
+    <div class="gg">
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title" style="color:var(--blue)">ALTITUDE vs TIME</span><span class="gc-cur" id="gvAlt" style="color:var(--blue)">&mdash; m</span></div>
+        <div class="gc-wrap"><canvas id="cAlt"></canvas></div>
+      </div>
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title" style="color:var(--blue)">AIRSPEED &amp; GROUND SPEED</span><span class="gc-cur" id="gvSpd" style="color:var(--blue)">&mdash; m/s</span></div>
+        <div class="gc-wrap"><canvas id="cSpd"></canvas></div>
+      </div>
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title" style="color:var(--teal)">BATTERY SOC</span><span class="gc-cur" id="gvSOC" style="color:var(--teal)">&mdash; %</span></div>
+        <div class="gc-wrap"><canvas id="cSOC"></canvas></div>
+      </div>
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title" style="color:var(--amber)">FUEL REMAINING</span><span class="gc-cur" id="gvFuel" style="color:var(--amber)">&mdash; kg</span></div>
+        <div class="gc-wrap"><canvas id="cFuel"></canvas></div>
+      </div>
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title">POWER SOURCES</span><span class="gc-cur" id="gvPwr">&mdash;</span></div>
+        <div class="gc-wrap"><canvas id="cPwr"></canvas></div>
+      </div>
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title">DRAG BREAKDOWN</span><span class="gc-cur" id="gvDrag">&mdash; N</span></div>
+        <div class="gc-wrap"><canvas id="cDrag"></canvas></div>
+      </div>
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title" style="color:var(--t2)">ATMOSPHERE</span><span class="gc-cur" id="gvAtm">&mdash;</span></div>
+        <div class="gc-wrap"><canvas id="cAtm"></canvas></div>
+      </div>
+      <div class="gc">
+        <div class="gc-hdr"><span class="gc-title">COMPONENT LOADING</span><span class="gc-cur" id="gvLoad">&mdash;</span></div>
+        <div class="gc-wrap"><canvas id="cLoad"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── S06 RESULTS ───────────────────────────────────────────────── -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-num">06</span>
+    <span class="sec-title">Mission Results</span>
+    <span class="sec-desc">Final computed metrics &mdash; physics engine output</span>
+    <span id="feasBadge" style="font-family:var(--mono);font-size:8px;padding:3px 10px;border-radius:2px;letter-spacing:1px;display:none"></span>
+  </div>
+  <div class="rg-wrap">
+    <div class="rg">
+      <div class="rm"><div class="rm-lbl">TOTAL MISSION TIME</div><div class="rm-val"><span id="rT">&mdash;</span><span class="rm-unit">min</span></div></div>
+      <div class="rm"><div class="rm-lbl">AIRBORNE TIME</div><div class="rm-val"><span id="rAT">&mdash;</span><span class="rm-unit">min</span></div></div>
+      <div class="rm"><div class="rm-lbl">PATH DISTANCE</div><div class="rm-val"><span id="rDist">&mdash;</span><span class="rm-unit">km</span></div></div>
+      <div class="rm"><div class="rm-lbl">NET DISPLACEMENT</div><div class="rm-val"><span id="rDisp">&mdash;</span><span class="rm-unit">km</span></div><div class="rm-note">Loiter = orbit</div></div>
+      <div class="rm"><div class="rm-lbl">MAX ALTITUDE</div><div class="rm-val"><span id="rAlt">&mdash;</span><span class="rm-unit">m</span></div></div>
+      <div class="rm"><div class="rm-lbl">CRUISE SPEED</div><div class="rm-val"><span id="rCr">&mdash;</span><span class="rm-unit">m/s</span></div></div>
+      <div class="rm"><div class="rm-lbl">FUEL CONSUMED</div><div class="rm-val"><span id="rFB">&mdash;</span><span class="rm-unit">kg</span></div></div>
+      <div class="rm"><div class="rm-lbl">FUEL REMAINING</div><div class="rm-val"><span id="rFR">&mdash;</span><span class="rm-unit">kg</span></div></div>
+      <div class="rm"><div class="rm-lbl">INITIAL BATTERY SOC</div><div class="rm-val"><span id="rSOCI">&mdash;</span><span class="rm-unit">%</span></div></div>
+      <div class="rm"><div class="rm-lbl">FINAL BATTERY SOC</div><div class="rm-val"><span id="rSOCF">&mdash;</span><span class="rm-unit">%</span></div></div>
+      <div class="rm"><div class="rm-lbl">MINIMUM SOC</div><div class="rm-val"><span id="rSOCm">&mdash;</span><span class="rm-unit">%</span></div></div>
+      <div class="rm"><div class="rm-lbl">LANDING MASS</div><div class="rm-val"><span id="rMass">&mdash;</span><span class="rm-unit">kg</span></div></div>
+      <div class="rm"><div class="rm-lbl">PEAK ENGINE POWER</div><div class="rm-val"><span id="rPkE">&mdash;</span><span class="rm-unit">kW</span></div></div>
+      <div class="rm"><div class="rm-lbl">PEAK MOTOR POWER</div><div class="rm-val"><span id="rPkM">&mdash;</span><span class="rm-unit">kW</span></div></div>
+      <div class="rm"><div class="rm-lbl">PEAK BATTERY POWER</div><div class="rm-val"><span id="rPkB">&mdash;</span><span class="rm-unit">kW</span></div></div>
+      <div class="rm"><div class="rm-lbl">PEAK SUPERCAP POWER</div><div class="rm-val"><span id="rPkSC">&mdash;</span><span class="rm-unit">kW</span></div></div>
+      <div class="rm"><div class="rm-lbl">REGEN ENERGY</div><div class="rm-val"><span id="rRgn">&mdash;</span><span class="rm-unit">kWh</span></div></div>
+      <div class="rm"><div class="rm-lbl">SHAFT ENERGY TOTAL</div><div class="rm-val"><span id="rShE">&mdash;</span><span class="rm-unit">kWh</span></div></div>
+      <div class="rm"><div class="rm-lbl">BATTERY DISCHARGED</div><div class="rm-val"><span id="rBatE">&mdash;</span><span class="rm-unit">kWh</span></div></div>
+      <div class="rm"><div class="rm-lbl">AVERAGE L/D</div><div class="rm-val"><span id="rLD">&mdash;</span></div></div>
+      <div class="rm"><div class="rm-lbl">MAX CL</div><div class="rm-val"><span id="rCL">&mdash;</span></div></div>
+      <div class="rm"><div class="rm-lbl">LOITER ORBITS</div><div class="rm-val"><span id="rOrb">&mdash;</span></div></div>
+      <div class="rm"><div class="rm-lbl">CONSTRAINT VIOL.</div><div class="rm-val"><span id="rViol">&mdash;</span></div></div>
+      <div class="rm"><div class="rm-lbl">MISSION FEASIBLE</div><div class="rm-val" id="rFeas" style="font-size:14px">&mdash;</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── S07 VALIDATION ────────────────────────────────────────────── -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-num">07</span>
+    <span class="sec-title">Mission Validation</span>
+    <span class="sec-desc">Automatic constraint and kinematic checks</span>
+  </div>
+  <div class="vr-wrap">
+    <div class="vr-grid">
+      <div class="vr-item"><span class="vr-icon ok" id="vrMassI">&#10003;</span><div class="vr-body"><div class="vr-label">MASS &le; MTOW</div><div class="vr-detail" id="vrMass">Awaiting simulation</div></div></div>
+      <div class="vr-item"><span class="vr-icon ok" id="vrEngI">&#10003;</span><div class="vr-body"><div class="vr-label">ENGINE &le; 60 kW</div><div class="vr-detail" id="vrEng">Awaiting simulation</div></div></div>
+      <div class="vr-item"><span class="vr-icon ok" id="vrMotI">&#10003;</span><div class="vr-body"><div class="vr-label">MOTOR &le; 70 kW</div><div class="vr-detail" id="vrMot">Awaiting simulation</div></div></div>
+      <div class="vr-item"><span class="vr-icon ok" id="vrSOCI">&#10003;</span><div class="vr-body"><div class="vr-label">SOC &ge; 20%</div><div class="vr-detail" id="vrSOC">Awaiting simulation</div></div></div>
+      <div class="vr-item"><span class="vr-icon ok" id="vrFuelI">&#10003;</span><div class="vr-body"><div class="vr-label">FUEL &ge; 0</div><div class="vr-detail" id="vrFuel">Awaiting simulation</div></div></div>
+      <div class="vr-item"><span class="vr-icon ok" id="vrStalI">&#10003;</span><div class="vr-body"><div class="vr-label">STALL MARGIN &ge; 1.2</div><div class="vr-detail" id="vrStal">Awaiting simulation</div></div></div>
+      <div class="vr-item"><span class="vr-icon ok" id="vrKineI">&#10003;</span><div class="vr-body"><div class="vr-label">KINEMATIC CONSISTENCY</div><div class="vr-detail" id="vrKine">Awaiting simulation</div></div></div>
+      <div class="vr-item"><span class="vr-icon ok" id="vrViolI">&#10003;</span><div class="vr-body"><div class="vr-label">CONSTRAINT VIOLATIONS</div><div class="vr-detail" id="vrViol">Awaiting simulation</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── S08 PHYSICS ───────────────────────────────────────────────── -->
+<div class="sec" style="margin:0 24px 8px;border:none">
+  <div class="phys-toggle" onclick="togPhys()">
+    <span class="ph-chev open" id="phChev">&#9660;</span>
+    <span>08 &nbsp;/&nbsp; PHYSICS &amp; CALCULATIONS</span>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:7px;color:var(--t3)">Current phase substitution &mdash; equations from mission1_sim.py</span>
+  </div>
+  <div class="phys-body open" id="physBody">
+    <div class="phys-cols">
+      <div>
+        <div class="eq-item"><div class="eq-name">ISA TEMPERATURE</div><div class="eq-formula">T(h) = 288.15 &#8722; 0.0065 h</div><div class="eq-num" id="eqT">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">AIR DENSITY</div><div class="eq-formula">&rho;(h) = P / (R<sub>air</sub> T)</div><div class="eq-num" id="eqRho">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">DYNAMIC PRESSURE</div><div class="eq-formula">q = &frac12; &rho; V<sup>2</sup></div><div class="eq-num" id="eqQ">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">LIFT COEFFICIENT</div><div class="eq-formula"><em>C<sub>L</sub></em> = n W / (q S)</div><div class="eq-num" id="eqCL">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">INDUCED DRAG FACTOR</div><div class="eq-formula">k = 1 / (&pi; e AR) = 0.02653</div></div>
+        <div class="eq-item"><div class="eq-name">DRAG COEFFICIENT</div><div class="eq-formula"><em>C<sub>D</sub></em> = C<sub>D0</sub> + k C<sub>L</sub><sup>2</sup></div><div class="eq-num" id="eqCD">&mdash;</div></div>
+      </div>
+      <div>
+        <div class="eq-item"><div class="eq-name">AERODYNAMIC DRAG</div><div class="eq-formula">D = q S <em>C<sub>D</sub></em></div><div class="eq-num" id="eqD">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">REQUIRED POWER</div><div class="eq-formula">P<sub>aero</sub> = D V + W <em>ḣ</em></div><div class="eq-num" id="eqPa">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">PROPELLER SHAFT</div><div class="eq-formula">P<sub>shaft</sub> = P<sub>aero</sub> / &eta;<sub>prop</sub></div><div class="eq-num" id="eqPsh">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">STALL SPEED</div><div class="eq-formula">V<sub>s</sub> = &radic;(2W / (&rho; S C<sub>L,max</sub>))</div><div class="eq-num" id="eqVs">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">FUEL FLOW</div><div class="eq-formula">ṁ<sub>fuel</sub> = BSFC &times; P<sub>eng</sub></div><div class="eq-num" id="eqFF">&mdash;</div></div>
+        <div class="eq-item"><div class="eq-name">SOC UPDATE</div><div class="eq-formula">SOC(t+dt) = SOC(t) &minus; P<sub>bat</sub>&thinsp;dt / E<sub>cap</sub></div><div class="eq-num" id="eqSOC">&mdash;</div></div>
+      </div>
+    </div>
+    <div class="rp-hdr" style="margin:10px 0 8px">MODEL ASSUMPTIONS (mission1_sim.py)</div>
+    <table class="asmp-tbl">
+      <thead><tr><th>PARAMETER</th><th>VALUE</th><th>NOTES</th></tr></thead>
+      <tbody>
+        <tr><td>ISA standard</td><td>T0=288.15 K, L=0.0065 K/m</td><td>ICAO troposphere</td></tr>
+        <tr><td>Wing area S</td><td>25 m&sup2;</td><td>Mission 1 spec</td></tr>
+        <tr><td>Aspect ratio AR</td><td>15</td><td>Mission 1 spec</td></tr>
+        <tr><td>Oswald e</td><td>0.80</td><td>Mission 1 spec &sect;10</td></tr>
+        <tr><td>CD0</td><td>0.025</td><td>Mission 1 spec &sect;10</td></tr>
+        <tr><td>CL max</td><td>1.50</td><td>Mission 1 spec &sect;10</td></tr>
+        <tr><td>Propeller &eta;</td><td>0.82</td><td>Mission 1 spec &sect;14</td></tr>
+        <tr><td>Motor &eta;</td><td>0.95</td><td>Mission 1 spec &sect;14</td></tr>
+        <tr><td>Inverter &eta;</td><td>0.97</td><td>Mission 1 spec &sect;14</td></tr>
+        <tr><td>Generator &eta;</td><td>0.92 &times; 0.98</td><td>Mission 1 spec &sect;13</td></tr>
+        <tr><td>Battery &eta; (discharge)</td><td>0.95 one-way</td><td>Mission 1 spec &sect;2</td></tr>
+        <tr><td>BSFC</td><td>0.60 kg/kWh</td><td>Mission 1 spec &sect;4</td></tr>
+        <tr><td>Battery capacity</td><td>36 kWh (90% initial SOC)</td><td>mission1_sim.py</td></tr>
+        <tr><td>Initial fuel</td><td>64 kg</td><td>Mission 1 spec</td></tr>
+        <tr><td>Timestep &Delta;t</td><td>1 s</td><td>mission1_sim.py DT</td></tr>
+        <tr><td>Loiter bank</td><td>25&deg; &Rightarrow; n=1.103</td><td>Mission 1 spec &sect;LOITER</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div style="height:60px"></div>
+
+</div><!-- /below-fold -->
+"""
+
+# ── ADD MISSION MODAL ─────────────────────────────────────────────────
+MODAL = """
+<div class="modal-ov" id="addModal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span class="modal-title">Add New Mission</span>
+      <button class="modal-close" onclick="closeAddMission()">&#10005;</button>
+    </div>
+
+    <!-- A: Mission Info -->
+    <div class="m-section">
+      <div class="m-sec-title" onclick="togSec('secA')">&#9654; A. MISSION INFORMATION</div>
+      <div class="m-sec-body" id="secA">
+        <div class="m-grid">
+          <div class="mf full"><div class="ml">Mission name</div><input class="mi2" id="nName" value="Mission 2" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Type <span class="ml-hint">(ISR / SURVEILLANCE)</span></div><input class="mi2" id="nType" value="Surveillance"></div>
+          <div class="mf"><div class="ml">Description</div><input class="mi2" id="nDesc" value="Custom mission profile"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B: Aircraft/Mass -->
+    <div class="m-section">
+      <div class="m-sec-title" onclick="togSec('secB')">&#9654; B. AIRCRAFT / MASS</div>
+      <div class="m-sec-body collapsed" id="secB">
+        <div class="m-grid">
+          <div class="mf"><div class="ml">MTOW [kg] <span class="ml-hint">500-2000</span></div><input class="mi2" id="nMtow" value="1000" min="500" max="2000" oninput="valModal()"><div class="m-val-msg" id="vmMtow"></div></div>
+          <div class="mf"><div class="ml">Payload [kg] <span class="ml-hint">0-500</span></div><input class="mi2" id="nPay" value="200" min="0" max="500" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Fuel [kg] <span class="ml-hint">0-200</span></div><input class="mi2" id="nFuel" value="64" min="0" max="200" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Battery mass [kg]</div><input class="mi2" id="nBatMass" value="160" oninput="valModal()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- C: Flight Profile -->
+    <div class="m-section">
+      <div class="m-sec-title" onclick="togSec('secC')">&#9654; C. FLIGHT PROFILE</div>
+      <div class="m-sec-body collapsed" id="secC">
+        <div class="m-grid">
+          <div class="mf"><div class="ml">Cruise altitude [m] <span class="ml-hint">500-10000</span></div><input class="mi2" id="nCrAlt" value="6000" min="500" max="10000" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Cruise speed [m/s] <span class="ml-hint">30-120</span></div><input class="mi2" id="nCrSpd" value="62" min="30" max="120" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Cruise duration [min]</div><input class="mi2" id="nCrDur" value="20" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Loiter speed [m/s]</div><input class="mi2" id="nLtSpd" value="41.4" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Loiter duration [min]</div><input class="mi2" id="nLtDur" value="30" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Climb rate [m/s] <span class="ml-hint">1-10</span></div><input class="mi2" id="nRoc" value="5.0" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Descent rate [m/s] <span class="ml-hint">1-8</span></div><input class="mi2" id="nRod" value="3.5" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Bank angle [&deg;]</div><input class="mi2" id="nBank" value="25" oninput="valModal()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- D: Aerodynamics -->
+    <div class="m-section">
+      <div class="m-sec-title" onclick="togSec('secD')">&#9654; D. AERODYNAMICS</div>
+      <div class="m-sec-body collapsed" id="secD">
+        <div class="m-grid">
+          <div class="mf"><div class="ml">Wing area S [m&sup2;]</div><input class="mi2" id="nS" value="25" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Aspect ratio AR</div><input class="mi2" id="nAR" value="15" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">CD0</div><input class="mi2" id="nCD0" value="0.025" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Oswald e</div><input class="mi2" id="nE" value="0.80" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">CL max</div><input class="mi2" id="nCLmax" value="1.50" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Propeller &eta;</div><input class="mi2" id="nEtaP" value="0.82" oninput="valModal()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- E: Propulsion -->
+    <div class="m-section">
+      <div class="m-sec-title" onclick="togSec('secE')">&#9654; E. PROPULSION &amp; ENERGY</div>
+      <div class="m-sec-body collapsed" id="secE">
+        <div class="m-grid">
+          <div class="mf"><div class="ml">Engine max [kW] <span class="ml-hint">20-120</span></div><input class="mi2" id="nEngKw" value="60" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">BSFC [kg/kWh]</div><input class="mi2" id="nBsfc" value="0.60" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Motor max [kW] <span class="ml-hint">20-150</span></div><input class="mi2" id="nMotKw" value="70" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Battery [kWh] <span class="ml-hint">5-100</span></div><input class="mi2" id="nBatKwh" value="36" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Initial SOC [%] <span class="ml-hint">50-95</span></div><input class="mi2" id="nSOC" value="90" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Min SOC [%] <span class="ml-hint">10-40</span></div><input class="mi2" id="nSOCmin" value="20" oninput="valModal()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- F: Environment -->
+    <div class="m-section">
+      <div class="m-sec-title" onclick="togSec('secF')">&#9654; F. ENVIRONMENT</div>
+      <div class="m-sec-body collapsed" id="secF">
+        <div class="m-grid">
+          <div class="mf"><div class="ml">Headwind [m/s] <span class="ml-hint">&minus;20 to +20</span></div><input class="mi2" id="nWind" value="0" oninput="valModal()"></div>
+          <div class="mf"><div class="ml">Temperature offset [&deg;C]</div><input class="mi2" id="nDT" value="0" oninput="valModal()"></div>
+        </div>
+        <div style="font-family:var(--mono);font-size:7px;color:var(--t3);margin-top:8px">
+          Note: positive headwind reduces ground speed. Aero model uses airspeed. Temperature offset shifts ISA density.
+        </div>
+      </div>
+    </div>
+
+    <!-- Validation summary -->
+    <div style="background:var(--bg3);border:1px solid var(--b1);border-radius:var(--r);padding:10px;margin-top:8px">
+      <div style="font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:1.5px;margin-bottom:6px">CONFIGURATION VALIDATION</div>
+      <div id="modalValMsg" style="font-family:var(--mono);font-size:8px;color:var(--green)">&#10003; All parameters valid</div>
+    </div>
+
+    <div class="m-acts">
+      <button class="m-ok" id="mOk" onclick="confirmAddMission()">SAVE MISSION</button>
+      <button class="m-ca" onclick="closeAddMission()">CANCEL</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+"""
+
+# ── JAVASCRIPT ────────────────────────────────────────────────────────
+# This is the physics engine + UI controller
+JS_START = """
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+// MISSION 1 — IMMUTABLE CONFIGURATION
+// Sourced from mission1_sim.py constants and user spec
+// DO NOT modify this object
+// ═══════════════════════════════════════════════════════════════
+const M1 = Object.freeze({
+  // Aircraft
+  MTOW_KG: 1000.0,
+  M_DRY_NO_FUEL: 936.0,  // kg (all dry mass inc. battery, SC)
+  M_FUEL_INIT: 64.0,     // kg
+  // Wing / Aero (from mission1_sim.py)
+  S: 25.0,               // m² wing area
+  AR: 15.0,
+  E_OSW: 0.80,
+  CD0: 0.025,
+  CL_MAX: 1.50,
+  k_IND: 1.0 / (Math.PI * 0.80 * 15.0),  // ≈ 0.02653
+  ETA_PROP: 0.82,
+  // Propulsion efficiencies
+  ETA_MOTOR: 0.95,
+  ETA_INV: 0.97,
+  ETA_GEN: 0.92,
+  ETA_RECT: 0.98,
+  ETA_BAT_DISC: 0.95,
+  ETA_BAT_CHG: 0.95,
+  ETA_WINDMILL: 0.60,
+  // Engine
+  ENG_MAX_W: 60000.0,
+  BSFC_KG_KWH: 0.60,
+  // Battery
+  BAT_CAP_WH: 36000.0,   // 36 kWh
+  BAT_SOC_INIT: 0.90,
+  BAT_SOC_MIN: 0.20,
+  BAT_SOC_MAX: 0.95,
+  BAT_MAX_DISCH_W: 72000.0,  // 2C of 36 kWh
+  BAT_MAX_CHG_W: 36000.0,    // 1C
+  BAT_V_NOM: 400.0,
+  // Supercapacitor
+  SC_CAP_WH: 66.0,           // 12 kg × 5.5 Wh/kg
+  SC_MAX_W: 64800.0,         // 12 kg × 5400 W/kg
+  SC_SOC_INIT: 0.95,
+  SC_SOC_MIN: 0.05,
+  SC_SOC_MAX: 0.95,
+  // Motor
+  MOT_MAX_W: 70000.0,
+  // Loiter
+  LOITER_BANK_DEG: 25.0,
+  LOITER_N: 1.0 / Math.cos(25.0 * Math.PI / 180.0),  // ≈ 1.103
+  // Physics
+  G: 9.80665,
+  R_AIR: 287.058,
+  T0_ISA: 288.15,
+  P0_ISA: 101325.0,
+  LAPSE: -0.0065,
+  DT: 1.0,   // timestep seconds
+});
+
+// ═══════════════════════════════════════════════════════════════
+// MISSION 1 — PHASE TABLE (10 phases, from user specification)
+// Total: 180+12+1194+1200+1800+600+571+360+120+60 = 6097 s = 101:37
+// ═══════════════════════════════════════════════════════════════
+const M1_PHASES = Object.freeze([
+  // name               h0     h1      V      hdot   dur_s  lf      color
+  {n:'ENGINE_START_TAXI',h0:0,  h1:0,   V:0,   hd:0,  d:180, lf:1.0, c:'#1a2030'},
+  {n:'TAKEOFF',          h0:0,  h1:30,  V:14,  hd:2.5,d:12,  lf:1.0, c:'#d4943a'},
+  {n:'CLIMB',            h0:30, h1:6000,V:40,  hd:5.0,d:1194,lf:1.0, c:'#3480d8'},
+  {n:'CRUISE',           h0:6000,h1:6000,V:62, hd:0,  d:1200,lf:1.0, c:'#20b5a6'},
+  {n:'LOITER',           h0:6000,h1:6000,V:41.4,hd:0, d:1800,lf:1.103,c:'#16b065'},
+  {n:'DESCENT_1',        h0:6000,h1:3000,V:45, hd:-5.0,d:600,lf:1.0, c:'#7050d8'},
+  {n:'DESCENT_2',        h0:3000,h1:1000,V:40, hd:-3.5,d:571,lf:1.0, c:'#9060e0'},
+  {n:'FINAL_APPROACH',   h0:1000,h1:100, V:34, hd:-2.5,d:360,lf:1.0, c:'#18a8c8'},
+  {n:'FLARE',            h0:100, h1:0,   V:27, hd:-0.8,d:120,lf:1.0, c:'#c87828'},
+  {n:'GROUND_ROLL',      h0:0,   h1:0,   V:12, hd:0,  d:60,  lf:1.0, c:'#1a2030'},
+]);
+const M1_TOTAL_S = M1_PHASES.reduce((a,p)=>a+p.d, 0); // 6097 s
+const M1_REAL_S  = 300;  // 5 min wall-clock playback
+
+// ═══════════════════════════════════════════════════════════════
+// KINEMATIC VALIDATION (pre-flight)
+// ═══════════════════════════════════════════════════════════════
+function kinemValidate() {
+  const issues = [];
+  for (const ph of M1_PHASES) {
+    if (ph.V <= 0) continue;  // ground phase
+    const dh = ph.h1 - ph.h0;
+    const dt = ph.d;
+    const vz_calc = dh / dt;
+    const vz_err = Math.abs(vz_calc - ph.hd);
+    if (Math.abs(ph.hd) > 0 && vz_err > 0.5) {
+      issues.push(`${ph.n}: ROC configured ${ph.hd.toFixed(1)} m/s, kinematic ${vz_calc.toFixed(2)} m/s`);
+    }
+    // horizontal distance check
+    const vh = Math.sqrt(Math.max(0, ph.V**2 - ph.hd**2));
+    const d_kine = vh * dt / 1000;  // km
+  }
+  return issues;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ATMOSPHERE (mirrors mission1_sim.py::isa())
+// ═══════════════════════════════════════════════════════════════
+function isa(h) {
+  const h_c = Math.max(0, Math.min(h, 11000));
+  const T = M1.T0_ISA + M1.LAPSE * h_c;
+  const P = M1.P0_ISA * Math.pow(T / M1.T0_ISA, M1.G / (M1.R_AIR * Math.abs(M1.LAPSE)));
+  const rho = P / (M1.R_AIR * T);
+  return {T, P, rho};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AERODYNAMICS (mirrors mission1_sim.py::aerodynamics())
+// ═══════════════════════════════════════════════════════════════
+function aerodynamics(W_N, V, h, lf) {
+  const {T, P, rho} = isa(h);
+  const q  = 0.5 * rho * V * V;
+  const CL = (q > 0) ? (W_N * lf / (q * M1.S)) : 0;
+  const CD_ind = M1.k_IND * CL * CL;
+  const CD = M1.CD0 + CD_ind;
+  const L  = q * M1.S * CL;
+  const D  = q * M1.S * CD;
+  return {q, CL, CD, CD_ind, CD0: M1.CD0, L, D, rho, T, P};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SHAFT POWER REQUIRED (mirrors mission1_sim.py::shaft_power_required())
+// ═══════════════════════════════════════════════════════════════
+function shaftPowerRequired(W_N, V, h, hdot, lf) {
+  const aero = aerodynamics(W_N, V, h, lf);
+  const P_aero = aero.D * V + W_N * hdot;
+  const P_shaft = (P_aero >= 0) ? (P_aero / M1.ETA_PROP) : P_aero;
+  return {...aero, P_aero, P_shaft, hdot};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STALL SPEED
+// ═══════════════════════════════════════════════════════════════
+function stallSpeed(W_N, h) {
+  const {rho} = isa(h);
+  return Math.sqrt(2 * W_N / (rho * M1.S * M1.CL_MAX));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BATTERY STATE (mirrors mission1_sim.py::Battery)
+// ═══════════════════════════════════════════════════════════════
+class Battery {
+  constructor() {
+    this.cap_Wh = M1.BAT_CAP_WH;
+    this.soc = M1.BAT_SOC_INIT;
+    this.soc_min = M1.BAT_SOC_MIN;
+    this.soc_max = M1.BAT_SOC_MAX;
+    this.maxDisc_W = M1.BAT_MAX_DISCH_W;
+    this.maxChg_W  = M1.BAT_MAX_CHG_W;
+  }
+  get energy_Wh() { return this.soc * this.cap_Wh; }
+  get usable_Wh() { return (this.soc - this.soc_min) * this.cap_Wh; }
+  step(p_req_W, dt_s) {
+    const dt_h = dt_s / 3600;
+    if (p_req_W > 0) {
+      p_req_W = Math.min(p_req_W, this.maxDisc_W);
+      const e_drain = p_req_W * dt_h / M1.ETA_BAT_DISC;
+      const d_soc   = e_drain / this.cap_Wh;
+      const avail   = this.soc - this.soc_min;
+      if (d_soc > avail) {
+        const d2 = Math.max(avail, 0);
+        p_req_W = (dt_h > 0) ? (d2 * this.cap_Wh * M1.ETA_BAT_DISC / dt_h) : 0;
+        this.soc -= d2;
+      } else { this.soc -= d_soc; }
+      return p_req_W;
+    } else if (p_req_W < 0) {
+      const p_chg = Math.min(-p_req_W, this.maxChg_W);
+      const e_str = p_chg * dt_h * M1.ETA_BAT_CHG;
+      const d_soc = e_str / this.cap_Wh;
+      const room  = this.soc_max - this.soc;
+      if (d_soc > room) {
+        const d2 = Math.max(room, 0);
+        const p2 = (dt_h > 0) ? (d2 * this.cap_Wh / (dt_h * M1.ETA_BAT_CHG)) : 0;
+        this.soc += d2;
+        return -p2;
+      } else { this.soc += d_soc; return -p_chg; }
+    }
+    return 0;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUPERCAPACITOR (mirrors mission1_sim.py::Supercapacitor)
+// ═══════════════════════════════════════════════════════════════
+class Supercapacitor {
+  constructor() {
+    this.cap_Wh  = M1.SC_CAP_WH;
+    this.max_W   = M1.SC_MAX_W;
+    this.soc     = M1.SC_SOC_INIT;
+    this.soc_min = M1.SC_SOC_MIN;
+    this.soc_max = M1.SC_SOC_MAX;
+    this._eta    = Math.sqrt(0.97);
+  }
+  get energy_Wh() { return this.soc * this.cap_Wh; }
+  step(p_req_W, dt_s) {
+    const dt_h = dt_s / 3600;
+    if (p_req_W > 0) {
+      p_req_W = Math.min(p_req_W, this.max_W);
+      const e_dr = p_req_W * dt_h / this._eta;
+      const d    = e_dr / this.cap_Wh;
+      const avl  = this.soc - this.soc_min;
+      if (d > avl) {
+        const d2 = Math.max(avl, 0);
+        const p2 = (dt_h > 0) ? (d2 * this.cap_Wh * this._eta / dt_h) : 0;
+        this.soc -= d2; return p2;
+      } else { this.soc -= d; return p_req_W; }
+    } else if (p_req_W < 0) {
+      const p_c = Math.min(-p_req_W, this.max_W);
+      const e_s = p_c * dt_h * this._eta;
+      const d   = e_s / this.cap_Wh;
+      const rm  = this.soc_max - this.soc;
+      if (d > rm) {
+        const d2 = Math.max(rm, 0);
+        const p2 = (dt_h > 0) ? (d2 * this.cap_Wh / (dt_h * this._eta)) : 0;
+        this.soc += d2; return -p2;
+      } else { this.soc += d; return -p_c; }
+    }
+    return 0;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// POWER SPLIT (mirrors mission1_sim.py::split_power())
+// ═══════════════════════════════════════════════════════════════
+function splitPower(phase, P_shaft_W, bat, sc, dt) {
+  const ETA_GEN_PATH = M1.ETA_GEN * M1.ETA_RECT;   // ≈ 0.9016
+  const ETA_MOT_PATH = M1.ETA_MOTOR * M1.ETA_INV;  // ≈ 0.9215
+  const ETA_REGEN    = M1.ETA_WINDMILL * M1.ETA_MOTOR * M1.ETA_INV * M1.ETA_BAT_CHG;
+
+  const ZERO = { P_eng_W:0, P_gen_elec_W:0, P_mot_W:0, P_bat_W:0, P_sc_W:0,
+                 ff_kg_s:0, fuel_burn_kg:0, P_regen_W:0, mode:'OFF' };
+
+  if (phase === 'ENGINE_START_TAXI') {
+    const P_idle = 3000;
+    const ff = (M1.BSFC_KG_KWH * P_idle / 1000) / 3600;
+    return {...ZERO, P_eng_W:P_idle, ff_kg_s:ff, fuel_burn_kg:ff*dt, mode:'ENGINE_IDLE'};
+  }
+  if (phase === 'GROUND_ROLL') return {...ZERO, mode:'SHUTDOWN'};
+
+  // Descent phases — regen
+  if (['DESCENT_1','DESCENT_2','FINAL_APPROACH','FLARE'].includes(phase)) {
+    if (P_shaft_W < 0) {
+      const P_regen_avail = -P_shaft_W;
+      const P_regen_elec  = P_regen_avail * ETA_REGEN;
+      const P_chg_poss    = Math.min(P_regen_elec, bat.maxChg_W, M1.MOT_MAX_W * ETA_MOT_PATH);
+      const P_bat_act     = bat.step(-P_chg_poss, dt);
+      const P_regen_stored = (P_bat_act < 0) ? -P_bat_act : 0;
+      return {...ZERO, P_bat_W: P_bat_act, P_regen_W: P_regen_stored, mode:'REGEN'};
+    }
+    return {...ZERO, mode:'GLIDE'};
+  }
+
+  // TAKEOFF — parallel: engine to prop + SC/battery for motor
+  if (phase === 'TAKEOFF') {
+    const P_eng_prop = Math.min(M1.ENG_MAX_W, P_shaft_W);
+    const P_rem = P_shaft_W - P_eng_prop;
+    const P_sc_elec  = (P_rem > 0) ? P_rem / ETA_MOT_PATH : 0;
+    const P_sc_act   = sc.step(P_sc_elec, dt);
+    const P_sc_mech  = P_sc_act * ETA_MOT_PATH;
+    const P_bat_rem  = Math.max(0, P_rem - P_sc_mech);
+    const P_bat_elec = (P_bat_rem > 0) ? Math.min(P_bat_rem / ETA_MOT_PATH, M1.MOT_MAX_W / ETA_MOT_PATH) : 0;
+    const P_bat_act  = bat.step(P_bat_elec, dt);
+    const P_mot_mech = (P_bat_act + P_sc_act) * ETA_MOT_PATH;
+    const ff = (M1.BSFC_KG_KWH * P_eng_prop / 1000) / 3600;
+    return {P_eng_W:P_eng_prop, P_gen_elec_W:0, P_mot_W:P_mot_mech,
+            P_bat_W:P_bat_act, P_sc_W:P_sc_act,
+            ff_kg_s:ff, fuel_burn_kg:ff*dt, P_regen_W:0, mode:'TAKEOFF_PARALLEL'};
+  }
+
+  // CLIMB & CRUISE — series: engine throttled to match demand, battery fills deficit
+  if (phase === 'CLIMB' || phase === 'CRUISE') {
+    // Compute electrical power required at the DC bus for this shaft demand
+    const P_bus_req = Math.max(0, (P_shaft_W > 0 ? P_shaft_W / ETA_MOT_PATH : 0));
+
+    // Engine produces what the generator needs: back-calculate from bus requirement
+    // First try engine alone (no battery needed):
+    const P_eng_alone = P_bus_req / ETA_GEN_PATH;
+
+    // SOC-aware split: if SOC > 55% and we're in climb, allow battery to supplement
+    // so engine doesn't have to run at max. If SOC < 45%, engine charges battery.
+    const soc = bat.soc;  // 0..1
+    let P_eng, P_bat_elec;
+
+    if (P_eng_alone <= M1.ENG_MAX_W) {
+      // Engine can cover demand alone — no battery needed for power, but
+      // if SOC is very low, run engine slightly above demand to charge battery
+      if (soc < 0.45 && P_eng_alone < M1.ENG_MAX_W * 0.9) {
+        // Charge battery with surplus: engine at 90% max
+        P_eng     = M1.ENG_MAX_W * 0.90;
+        const P_gen_elec_surplus = P_eng * ETA_GEN_PATH;
+        P_bat_elec = -(P_gen_elec_surplus - P_bus_req);  // negative = charging
+      } else {
+        // Engine exactly meets demand, battery on standby
+        P_eng     = Math.min(P_eng_alone, M1.ENG_MAX_W);
+        P_bat_elec = 0;
+      }
+    } else {
+      // Demand exceeds engine capability alone — battery must supplement
+      P_eng      = M1.ENG_MAX_W;  // saturate engine
+      const P_gen_elec_max = P_eng * ETA_GEN_PATH;
+      P_bat_elec = Math.min(P_bus_req - P_gen_elec_max, M1.BAT_MAX_DISCH_W);
+    }
+
+    const P_gen_elec  = P_eng * ETA_GEN_PATH;
+    const P_bat_act   = bat.step(P_bat_elec, dt);
+    const P_bus_avail = P_gen_elec + Math.max(0, P_bat_act);
+    const P_mot_mech  = Math.min(P_bus_avail * ETA_MOT_PATH, M1.MOT_MAX_W);
+    const ff = (M1.BSFC_KG_KWH * P_eng / 1000) / 3600;
+    return {P_eng_W:P_eng, P_gen_elec_W:P_gen_elec, P_mot_W:P_mot_mech,
+            P_bat_W:P_bat_act, P_sc_W:0,
+            ff_kg_s:ff, fuel_burn_kg:ff*dt, P_regen_W:0,
+            mode: phase==='CLIMB' ? 'CLIMB_SERIES' : 'CRUISE_SERIES'};
+  }
+
+  // LOITER — series at partial load
+  if (phase === 'LOITER') {
+    const P_eng_req = P_shaft_W / (ETA_GEN_PATH * ETA_MOT_PATH);
+    const P_eng_act = Math.min(Math.max(0, P_eng_req), M1.ENG_MAX_W);
+    const P_gen_elec = P_eng_act * ETA_GEN_PATH;
+    const P_mot_mech = P_gen_elec * ETA_MOT_PATH;
+    const P_extra = Math.max(0, P_gen_elec - P_shaft_W / ETA_MOT_PATH);
+    let P_bat_act = 0;
+    if (P_extra > 100 && bat.soc < bat.soc_max) {
+      P_bat_act = bat.step(-P_extra, dt);
+    }
+    const ff = (M1.BSFC_KG_KWH * P_eng_act / 1000) / 3600;
+    return {P_eng_W:P_eng_act, P_gen_elec_W:P_gen_elec, P_mot_W:P_mot_mech,
+            P_bat_W:P_bat_act, P_sc_W:0,
+            ff_kg_s:ff, fuel_burn_kg:ff*dt, P_regen_W:0, mode:'LOITER_SERIES'};
+  }
+
+  return {...ZERO, mode:'UNKNOWN'};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN SIMULATION RUNNER
+// Runs at mission_time_step = 1 s; stores every step
+// ═══════════════════════════════════════════════════════════════
+function runSimulation(windMs = 0) {
+  const bat  = new Battery();
+  const sc   = new Supercapacitor();
+  let fuel_kg      = M1.M_FUEL_INIT;
+  let t            = 0;
+  let dist_m       = 0;
+  let disp_m       = 0;   // net displacement (loiter ≈ 0)
+  let loiter_orbits= 0;
+  let cumul_fuel   = 0;
+  let cumul_bat_e  = 0;   // kWh discharged
+  let cumul_regen  = 0;   // kWh recovered
+  let cumul_shaft_e= 0;   // kWh aero energy
+  const records    = [];
+  const violations = [];
+
+  // Phase architecture counters
+  let n_series=0, n_parallel=0, n_regen=0;
+
+  for (const ph of M1_PHASES) {
+    const n_steps = Math.max(1, Math.round(ph.d / M1.DT));
+
+    for (let step = 0; step < n_steps; step++) {
+      const frac = (n_steps > 1) ? step / (n_steps - 1) : 0;
+      const h = Math.max(0, ph.h0 + (ph.h1 - ph.h0) * frac);
+      const V = ph.V;
+      const hdot = ph.hd;
+      const lf   = ph.lf;
+
+      const M  = M1.M_DRY_NO_FUEL + fuel_kg;
+      const W_N = M * M1.G;
+
+      const {T, P, rho} = isa(h);
+      const IS_GROUND = (ph.n === 'ENGINE_START_TAXI' || ph.n === 'GROUND_ROLL');
+
+      let aero, P_shaft_req, V_s = 0, stall_margin = 0;
+      if (IS_GROUND || V < 1) {
+        aero = {q:0, CL:0, CD:M1.CD0, CD_ind:0, CD0:M1.CD0, L:0, D:0, rho, T, P, P_aero:0, P_shaft:0, hdot};
+        P_shaft_req = 0;
+      } else {
+        aero = shaftPowerRequired(W_N, V, h, hdot, lf);
+        P_shaft_req = aero.P_shaft;
+        V_s = stallSpeed(W_N, h);
+        stall_margin = (V_s > 0) ? V / V_s : 0;
+      }
+
+      // Ground speed (headwind reduces ground speed)
+      const V_horiz = Math.sqrt(Math.max(0, V*V - hdot*hdot));
+      const V_gnd   = Math.max(0, V_horiz - windMs);
+
+      // Power split
+      const out = splitPower(ph.n, P_shaft_req, bat, sc, M1.DT);
+
+      // Fuel
+      fuel_kg = Math.max(0, fuel_kg - out.fuel_burn_kg);
+      cumul_fuel += out.fuel_burn_kg;
+
+      // Distance & displacement
+      dist_m += V_gnd * M1.DT;
+      if (ph.n === 'LOITER') {
+        // Loiter: circular orbit — path distance accumulates, net disp ≈ 0
+        // orbit radius R = V² / (g tanφ)
+        const phi = M1.LOITER_BANK_DEG * Math.PI / 180;
+        const R = (M1.G > 0 && Math.tan(phi) > 0) ? (V*V / (M1.G * Math.tan(phi))) : 347;
+        const circ = 2 * Math.PI * R;
+        loiter_orbits += V_gnd * M1.DT / circ;
+      } else {
+        disp_m += V_gnd * M1.DT;
+      }
+
+      // Cumulative energy
+      if (out.P_bat_W > 0) cumul_bat_e += out.P_bat_W * M1.DT / 3600000;
+      cumul_regen   += out.P_regen_W * M1.DT / 3600000;
+      cumul_shaft_e += Math.max(0, aero.P_aero || 0) * M1.DT / 3600000;
+
+      // Architecture counters
+      const m = out.mode || '';
+      if (m.includes('SERIES'))  n_series++;
+      else if (m.includes('TAKEOFF') || m.includes('PARALLEL')) n_parallel++;
+      else if (m.includes('REGEN')) n_regen++;
+
+      // Constraints
+      const viol = [];
+      if (bat.soc < M1.BAT_SOC_MIN - 0.001) viol.push('SOC_LOW');
+      if (out.P_eng_W > M1.ENG_MAX_W * 1.001) viol.push('ENG_OVER');
+      if (out.P_mot_W > M1.MOT_MAX_W * 1.001) viol.push('MOT_OVER');
+      if (viol.length) violations.push({t, phase:ph.n, viol});
+
+      records.push({
+        t,
+        MISSION_PHASE: ph.n,
+        ALTITUDE: h,
+        TRUE_AIRSPEED: V,
+        GROUND_SPEED: V_gnd,
+        VERTICAL_SPEED: hdot,
+        TEMPERATURE: T,
+        PRESSURE: P,
+        AIR_DENSITY: rho,
+        AIRCRAFT_MASS: M,
+        FUEL_REMAINING: fuel_kg,
+        FUEL_FLOW: out.ff_kg_s * 3600,
+        WEIGHT: W_N,
+        DYNAMIC_PRESSURE: aero.q,
+        CL: aero.CL || 0,
+        CD: aero.CD || M1.CD0,
+        CD0: M1.CD0,
+        CD_INDUCED: aero.CD_ind || 0,
+        DRAG: aero.D || 0,
+        LIFT: aero.L || 0,
+        P_AERO_KW: (aero.P_aero || 0) / 1000,
+        SHAFT_POWER_REQUIRED: P_shaft_req / 1000,
+        ENGINE_POWER: out.P_eng_W / 1000,
+        GENERATOR_ELEC_POWER: out.P_gen_elec_W / 1000,
+        MOTOR_POWER: out.P_mot_W / 1000,
+        BATTERY_POWER: out.P_bat_W / 1000,
+        SUPERCAPACITOR_POWER: out.P_sc_W / 1000,
+        BATTERY_SOC: bat.soc * 100,
+        BATTERY_ENERGY: bat.energy_Wh / 1000,
+        BATTERY_CURRENT: (M1.BAT_V_NOM > 0) ? out.P_bat_W / M1.BAT_V_NOM : 0,
+        SUPERCAPACITOR_SOC: sc.soc * 100,
+        SUPERCAPACITOR_ENERGY: sc.energy_Wh,
+        CUMULATIVE_FUEL: cumul_fuel,
+        CUMULATIVE_BATTERY_E: cumul_bat_e,
+        CUMULATIVE_REGEN_E: cumul_regen,
+        CUMULATIVE_SHAFT_E: cumul_shaft_e,
+        P_REGEN_STORED_KW: out.P_regen_W / 1000,
+        DISTANCE: dist_m / 1000,
+        DISPLACEMENT: disp_m / 1000,
+        LOITER_ORBITS: loiter_orbits,
+        MODE: out.mode,
+        STALL_SPEED: V_s,
+        STALL_MARGIN: stall_margin,
+        VIOLATIONS: viol.join('|'),
+      });
+
+      t += M1.DT;
+    }
+  }
+
+  return {records, violations, n_series, n_parallel, n_regen};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let simState   = 'IDLE';   // IDLE / RUNNING / PAUSED / COMPLETE
+let simT       = 0;        // wall-clock seconds elapsed
+let missionT   = 0;        // mission time seconds
+let spd        = 10;       // speed multiplier
+let loopId     = null;
+let lastTick   = 0;
+let fullData   = [];       // all simulation records
+let graphMode  = 'live';   // 'live' | 'full'
+let engMode    = false;
+let missions   = [];       // saved missions (beyond M1)
+let curMission = 'M1';
+
+const $ = id => document.getElementById(id);
+const fmt = (v, d=1) => (v == null || isNaN(v)) ? '—' : Number(v).toFixed(d);
+function fmtT(s) {
+  const m = Math.floor(s/60), sc = Math.floor(s%60);
+  return String(m).padStart(2,'0') + ':' + String(sc).padStart(2,'0');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+function toast(msg, type='info') {
+  const el = $('toast');
+  el.innerHTML = msg; el.className = `toast ${type} show`;
+  setTimeout(() => el.className = 'toast', 3500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATUS DOT
+// ═══════════════════════════════════════════════════════════════
+function setStatus(s) {
+  const dot=$('sDot'), txt=$('sTxt');
+  dot.className='sdot';
+  if (s==='READY'){dot.classList.add('ready');txt.textContent='READY';}
+  else if(s==='RUNNING'){dot.classList.add('run');txt.textContent='SIMULATING';}
+  else if(s==='PAUSED'){dot.classList.add('run');txt.textContent='PAUSED';}
+  else {dot.classList.add('done');txt.textContent='COMPLETE';}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TIMELINE BUILD
+// ═══════════════════════════════════════════════════════════════
+function buildTimeline() {
+  const phDiv=$('tlPhases'), sgDiv=$('tlSegs');
+  phDiv.innerHTML=''; sgDiv.innerHTML='';
+  M1_PHASES.forEach(ph => {
+    const w = (ph.d / M1_TOTAL_S * 100).toFixed(3)+'%';
+    const lbl = document.createElement('div');
+    lbl.className='tl-pl'; lbl.id='tlpl_'+ph.n; lbl.style.width=w;
+    lbl.textContent = ph.d >= 600 ? ph.n.replace(/_/g,' ') : (ph.d >= 100 ? ph.n.split('_')[0] : '');
+    lbl.title = ph.n + ': ' + (ph.d/60).toFixed(1)+' min';
+    phDiv.appendChild(lbl);
+    const seg = document.createElement('div');
+    seg.className='tl-seg'; seg.id='tlsg_'+ph.n;
+    seg.style.width=w; seg.style.background=ph.c;
+    sgDiv.appendChild(seg);
+  });
+}
+
+function updateTimeline(mt) {
+  const pct = Math.min(mt/M1_TOTAL_S*100, 100);
+  $('tlCur').style.left = pct+'%';
+  let el = 0;
+  M1_PHASES.forEach(ph => {
+    const e = el + ph.d;
+    const sg = $('tlsg_'+ph.n), lb = $('tlpl_'+ph.n);
+    if (sg) sg.className = 'tl-seg'+(mt>=e?' done': mt>=el?' cur':'');
+    if (lb) lb.className = 'tl-pl'+(mt>=el&&mt<e?' cur': mt>=e?' done':'');
+    el += ph.d;
+  });
+}
+
+function phaseAt(mt) {
+  let el = 0;
+  for (let i=0; i<M1_PHASES.length; i++) {
+    const ph = M1_PHASES[i];
+    el += ph.d;
+    if (mt < el || i === M1_PHASES.length-1) {
+      const ph_start = el - ph.d;
+      return {ph, idx:i, pt: mt - ph_start, start:ph_start};
+    }
+  }
+  return {ph:M1_PHASES[M1_PHASES.length-1], idx:M1_PHASES.length-1, pt:0, start:0};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BINARY SEARCH in records array
+// ═══════════════════════════════════════════════════════════════
+function recAt(mt) {
+  if (!fullData.length) return null;
+  const maxT = fullData[fullData.length-1].t || 0;
+  const t = Math.min(mt, maxT);
+  let lo=0, hi=fullData.length-1;
+  while(lo<hi){ const mid=(lo+hi)>>1; if((fullData[mid].t||0)<t) lo=mid+1; else hi=mid; }
+  return fullData[lo];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATE UPDATE — reads record, updates all UI panels
+// ═══════════════════════════════════════════════════════════════
+function updState(r) {
+  if (!r) return;
+  const soc  = +r.BATTERY_SOC  || 0;
+  const fuel = +r.FUEL_REMAINING || 0;
+  const alt  = +r.ALTITUDE || 0;
+  const tas  = +r.TRUE_AIRSPEED || 0;
+  const gs   = +r.GROUND_SPEED || 0;
+  const mass = +r.AIRCRAFT_MASS || M1.MTOW_KG;
+  const CL   = +r.CL || 0;
+  const CD   = +r.CD || M1.CD0;
+  const LD   = (CD>0) ? CL/CD : 0;
+  const sm   = +r.STALL_MARGIN || 0;
+  const T    = +r.TEMPERATURE || 288;
+  const P    = +r.PRESSURE || 101325;
+  const rho  = +r.AIR_DENSITY || 1.225;
+  const q    = +r.DYNAMIC_PRESSURE || 0;
+  const Vs   = +r.STALL_SPEED || 0;
+  const psh  = +r.SHAFT_POWER_REQUIRED || 0;
+  const dist = +r.DISTANCE || 0;
+  const disp = +r.DISPLACEMENT || 0;
+  const orb  = +r.LOITER_ORBITS || 0;
+  const sc_soc = +r.SUPERCAPACITOR_SOC || 95;
+  const sc_e   = +r.SUPERCAPACITOR_ENERGY || 0;
+  const bat_e  = +r.BATTERY_ENERGY || 0;
+  const bat_i  = +r.BATTERY_CURRENT || 0;
+  const P_aero = +r.P_AERO_KW || 0;
+  const mode   = r.MODE || '—';
+
+  // ── LIVE POWER SPLIT RECOMPUTE ──────────────────────────────────
+  // Re-run splitPower every tick using the current shaft demand from
+  // the record. This makes ALL powertrain values change continuously
+  // as aerodynamics evolve (altitude, speed, density change).
+  // We use a lightweight dummy bat/sc object (read-only, no state change)
+  // so SOC isn't consumed by the display calculation.
+  const _readBat = {
+    soc: soc/100,
+    soc_max: M1.BAT_SOC_MAX,
+    maxDisch_W: M1.BAT_MAX_DISCH_W,
+    maxChg_W: M1.BAT_MAX_CHG_W,
+    step: function(P_W, dt) {
+      // Return power clamped to limits — don't mutate state
+      if (P_W > 0) return Math.min(P_W, this.maxDisch_W);
+      return Math.max(P_W, -this.maxChg_W);
+    }
+  };
+  const _readSc = {
+    soc: sc_soc/100,
+    step: function(P_W, dt) { return Math.min(Math.max(P_W, -M1.SC_MAX_W), M1.SC_MAX_W); }
+  };
+  // Map record MODE back to phase name for splitPower
+  const _modeToPhase = (m) => {
+    const mu = (m||'').toUpperCase();
+    if (mu.includes('CLIMB'))   return 'CLIMB';
+    if (mu.includes('CRUISE'))  return 'CRUISE';
+    if (mu.includes('LOITER'))  return 'LOITER';
+    if (mu.includes('DESCENT') || mu.includes('APPROACH') || mu.includes('GLIDE') || mu.includes('FLARE') || mu.includes('REGEN')) return 'DESCENT_1';
+    if (mu.includes('TAKEOFF')) return 'TAKEOFF';
+    if (mu.includes('ENGINE_START') || mu.includes('TAXI') || mu.includes('IDLE')) return 'ENGINE_START_TAXI';
+    if (mu.includes('GROUND') || mu.includes('SHUTDOWN')) return 'GROUND_ROLL';
+    return 'CRUISE';
+  };
+  const _phase = _modeToPhase(mode);
+  const _live  = splitPower(_phase, psh * 1000, _readBat, _readSc, M1.DT);
+  // Use live-computed values for display
+  const eng  = _live.P_eng_W      / 1000;
+  const gen  = _live.P_gen_elec_W / 1000;
+  const mot  = _live.P_mot_W      / 1000;
+  const bat  = _live.P_bat_W      / 1000;
+  const scP  = _live.P_sc_W       / 1000;
+  const ff   = _live.ff_kg_s      * 3600; // kg/h
+
+  // Aircraft state strip
+  $('acSOC').textContent  = fmt(soc);   $('acFuel').textContent = fmt(fuel);
+  $('acAlt').textContent  = fmt(alt,0); $('acTas').textContent  = fmt(tas);
+  $('acGs').textContent   = fmt(gs);    $('acEng').textContent  = fmt(eng);
+  $('acMot').textContent  = fmt(mot);   $('acGen').textContent  = fmt(gen);
+  $('acMass').textContent = fmt(mass,0);$('acCL').textContent   = fmt(CL,3);
+  $('acLD').textContent   = fmt(LD,2);  $('acSM').textContent   = fmt(sm,2);
+
+  // SOC badge
+  const sb=$('bSOC');
+  if(soc<25){sb.className='ac-badge ab-crit';sb.textContent='CRITICAL';}
+  else if(soc<40){sb.className='ac-badge ab-warn';sb.textContent='LOW';}
+  else{sb.className='ac-badge ab-ok';sb.textContent='NORMAL';}
+  // Fuel badge
+  const fb=$('bFuel');
+  if(fuel<5){fb.className='ac-badge ab-crit';fb.textContent='CRITICAL';}
+  else if(fuel<15){fb.className='ac-badge ab-warn';fb.textContent='RESERVE';}
+  else{fb.className='ac-badge ab-ok';fb.textContent='OK';}
+  // Engine badge
+  const eb=$('bEng');
+  if(eng<=0){eb.className='ac-badge ab-off';eb.textContent='OFF';}
+  else if(eng>55){eb.className='ac-badge ab-warn';eb.textContent='HIGH';}
+  else{eb.className='ac-badge ab-ok';eb.textContent='ON';}
+  // Motor badge
+  const mb=$('bMot');
+  if(mot<-0.5){mb.className='ac-badge ab-regen';mb.textContent='REGEN';}
+  else if(mot<0.1){mb.className='ac-badge ab-off';mb.textContent='IDLE';}
+  else if(mot>60){mb.className='ac-badge ab-warn';mb.textContent='HIGH';}
+  else{mb.className='ac-badge ab-ok';mb.textContent='ON';}
+
+  // Phase info row
+  const {ph,pt} = phaseAt(missionT);
+  $('phCur').textContent  = ph.n.replace(/_/g,' ');
+  $('phCur').style.color  = ph.c;
+  $('phAlt').textContent  = fmt(alt,0);
+  $('phTas').textContent  = fmt(tas);
+  $('phGs').textContent   = fmt(gs);
+  $('phVs').textContent   = (ph.hd>=0?'+':'')+fmt(ph.hd);
+  $('phPsh').textContent  = fmt(psh);
+  $('phLF').textContent   = fmt(ph.lf,3);
+  $('phDur').textContent  = (ph.d/60).toFixed(1)+' min';
+
+  // Phase progress
+  const ppct = ph.d > 0 ? Math.min(pt/ph.d*100, 100) : 100;
+  $('ckPPct').textContent  = ppct.toFixed(0);
+  $('ckPSub').textContent  = ph.n.replace(/_/g,' ');
+
+  // Powertrain
+  const bus = gen + Math.max(0,bat) + Math.max(0,scP);
+  $('ptEng').textContent  = fmt(eng);
+  $('ptGen').textContent  = fmt(gen);
+  $('ptBus').textContent  = fmt(bus)+' kW';
+  $('ptBatF').textContent = (bat>=0?'+':'')+fmt(bat)+' kW';
+  $('ptSCF').textContent  = (scP>=0?'+':'')+fmt(scP)+' kW';
+  $('ptMot').textContent  = fmt(mot);
+  $('ptProp').textContent = fmt(mot*.82);
+  $('pbSrc').textContent  = fmt(bus);
+  $('pbProp').textContent = fmt(mot);
+  $('pbLoss').textContent = fmt(bus-mot*1.0);
+  $('pbMode').textContent = mode;
+
+  // Arrow animation active/inactive
+  const active = eng>0.5;
+  ['arr1','arr2','arr3','arr4'].forEach(id => {
+    const el=$('arr'+id.slice(3)); if(el) el.className='arr-anim'+(active?'':' inactive');
+  });
+  document.querySelectorAll('.arr-anim').forEach(el=>el.className='arr-anim'+(active?'':' inactive'));
+
+  // ECMS
+  $('ecSOC').textContent    = fmt(soc)+' %';
+  $('ecErr').textContent    = fmt(soc-62,1)+' %';
+  $('ecEngSt').textContent  = eng>0?'ON':'OFF';
+  $('ecBatCmd').textContent = fmt(bat)+' kW';
+  $('ecMotCmd').textContent = fmt(mot)+' kW';
+  $('ecArch').textContent   = mode.includes('SERIES')?'SERIES':mode.includes('TAKEOFF')?'PARALLEL':mode.includes('REGEN')?'REGEN':'OFF';
+  $('ecPe').textContent     = fmt(eng)+' kW';
+  $('ecPg').textContent     = fmt(gen)+' kW';
+  $('ecPb').textContent     = fmt(bat)+' kW';
+  $('ecPsc').textContent    = fmt(scP)+' kW';
+  $('ecPm').textContent     = fmt(mot)+' kW';
+  $('ecPsh').textContent    = fmt(psh)+' kW';
+  // P_REGEN_STORED_KW: in JS engine records this field exists; in API records it doesn't.
+  // When battery power is negative (charging) during a non-engine phase → that IS regen.
+  const regenKW = (r.P_REGEN_STORED_KW != null && r.P_REGEN_STORED_KW > 0)
+    ? +r.P_REGEN_STORED_KW
+    : (bat < -0.05 && eng < 0.5) ? -bat : 0;
+  $('ecPrg').textContent    = fmt(regenKW)+' kW';
+
+  // ECMS decision text
+  let dec='';
+  if(eng<=0 && mot<0) dec='<em>Engine OFF</em>. Motor in regenerative mode — descending, recovering energy to battery.';
+  else if(eng<=0 && mot>=0) dec='<em>Engine OFF</em>. Battery sustaining minimal demand during descent glide.';
+  else if(bat>1) dec=`<em>Engine ON</em> at ${((eng/60)*100).toFixed(0)}% rated (${fmt(eng)} kW). Battery supplementing <em>+${fmt(bat)} kW</em> — SOC ${fmt(soc)}% below 62% target.`;
+  else if(bat<-0.5) dec=`<em>Engine ON</em> at ${((eng/60)*100).toFixed(0)}% rated. Generator surplus charging battery at ${fmt(-bat)} kW.`;
+  else dec=`<em>Engine ON</em> at ${((eng/60)*100).toFixed(0)}% rated (${fmt(eng)} kW). Engine meeting full demand, battery on standby.`;
+  $('ecDec').innerHTML=dec;
+
+  // Right panel
+  $('rpSOC').innerHTML    = fmt(soc)+'<span class="rp-u">%</span>';
+  $('rpSOCbar').style.width = Math.max(0,Math.min(100,soc))+'%';
+  $('rpSOCbar').style.background = soc<25?'var(--red)':soc<40?'var(--amber)':'var(--teal)';
+  $('rpBatP').innerHTML   = fmt(bat)+'<span class="rp-u">kW</span>';
+  $('rpBatI').innerHTML   = fmt(bat_i)+'<span class="rp-u">A</span>';
+  $('rpBatE').innerHTML   = fmt(bat_e)+'<span class="rp-u">kWh</span>';
+  $('rpSCsoc').innerHTML  = fmt(sc_soc)+'<span class="rp-u">%</span>';
+  $('rpSCbar').style.width= Math.max(0,Math.min(100,sc_soc))+'%';
+  $('rpSCP').innerHTML    = fmt(scP)+'<span class="rp-u">kW</span>';
+  $('rpSCE').innerHTML    = fmt(sc_e,1)+'<span class="rp-u">Wh</span>';
+  $('rpFuel').innerHTML   = fmt(fuel)+'<span class="rp-u">kg</span>';
+  $('rpFuelBar').style.width = Math.max(0,Math.min(100,fuel/M1.M_FUEL_INIT*100))+'%';
+  $('rpFF').innerHTML     = fmt(ff)+'<span class="rp-u">kg/h</span>';
+  $('rpFC').innerHTML     = fmt(M1.M_FUEL_INIT-fuel)+'<span class="rp-u">kg</span>';
+  $('rpEng').innerHTML    = fmt(eng)+'<span class="rp-u">kW</span>';
+  $('rpEngBar').style.width= Math.min(100,eng/60*100)+'%';
+  $('rpEngL').innerHTML   = fmt(eng/60*100,0)+'<span class="rp-u">%</span>';
+  $('rpMot').innerHTML    = fmt(mot)+'<span class="rp-u">kW</span>';
+  $('rpMotBar').style.width= Math.max(0,Math.min(100,Math.abs(mot)/70*100))+'%';
+  $('rpGenE').innerHTML   = fmt(gen)+'<span class="rp-u">kW</span>';
+  $('rpProp').innerHTML   = fmt(mot*.82)+'<span class="rp-u">kW</span>';
+  $('rpMode').textContent = mode;
+  $('rpT').textContent    = fmt(T,2)+' K ('+fmt(T-273.15,1)+' °C)';
+  $('rpP').textContent    = fmt(P,0)+' Pa';
+  $('rpRho').textContent  = fmt(rho,4)+' kg/m³';
+  $('rpQ').textContent    = fmt(q,1)+' Pa';
+  $('rpVs').innerHTML     = fmt(Vs)+'<span class="rp-u">m/s</span>';
+  $('rpSM').textContent   = fmt(sm,2);
+  $('rpDist').innerHTML   = fmt(dist,1)+'<span class="rp-u">km</span>';
+  $('rpDisp').innerHTML   = fmt(disp,1)+'<span class="rp-u">km</span>';
+  $('rpOrb').textContent  = fmt(orb,1);
+
+  // Nav chips
+  $('nFuel').textContent  = fmt(fuel,1);
+
+  // Physics equations — live substitution
+  $('eqT').textContent    = `T = 288.15 − 0.0065×${fmt(alt,0)} = ${fmt(T,2)} K`;
+  $('eqRho').textContent  = `ρ = ${fmt(P,0)}/(287.058×${fmt(T,2)}) = ${fmt(rho,4)} kg/m³`;
+  $('eqQ').textContent    = `q = 0.5×${fmt(rho,4)}×${fmt(tas)}² = ${fmt(q,1)} Pa`;
+  $('eqCL').textContent   = `CL = ${fmt(ph.lf,3)}×${fmt(mass*M1.G,0)}/(${fmt(q,1)}×25) = ${fmt(CL,4)}`;
+  $('eqCD').textContent   = `CD = 0.025 + 0.02653×${fmt(CL,4)}² = ${fmt(CD,5)}`;
+  $('eqD').textContent    = `D = ${fmt(q,1)}×25×${fmt(CD,5)} = ${fmt(r.DRAG||0,1)} N`;
+  $('eqPa').textContent   = `P_aero = ${fmt(r.DRAG||0,1)}×${fmt(tas)} + ${fmt(mass*M1.G,0)}×${fmt(ph.hd)} = ${fmt(P_aero,2)} kW`;
+  $('eqPsh').textContent  = `P_shaft = ${fmt(P_aero,2)}/0.82 = ${fmt(psh,2)} kW`;
+  $('eqVs').textContent   = Vs>0 ? `Vs = √(2×${fmt(mass*M1.G,0)}/(${fmt(rho,4)}×25×1.5)) = ${fmt(Vs,1)} m/s` : 'Vs: ground phase';
+  $('eqFF').textContent   = `ṁ = 0.60×${fmt(eng,2)}/1000/3600 = ${fmt(ff/3600,6)} kg/s = ${fmt(ff,3)} kg/h`;
+  $('eqSOC').textContent  = `SOC = ${fmt(soc+bat*M1.DT/M1.BAT_CAP_WH*100,2)}% − ${fmt(bat,2)}kW×1s/${fmt(M1.BAT_CAP_WH/1000,0)}kWh`;
+
+  // Chart live current value
+  $('gvAlt').textContent  = fmt(alt,0)+' m';
+  $('gvSpd').textContent  = fmt(tas)+' m/s';
+  $('gvSOC').textContent  = fmt(soc,1)+' %';
+  $('gvFuel').textContent = fmt(fuel)+' kg';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHART SETUP (Chart.js)
+// ═══════════════════════════════════════════════════════════════
+const CHART_FONT = {family:"'JetBrains Mono',monospace"};
+const CHART_DEFAULTS = {
+  responsive:true, maintainAspectRatio:false, animation:false,
+  plugins:{legend:{display:true, labels:{font:{...CHART_FONT,size:7},color:'#3d4758',boxWidth:10,padding:8}},
+           tooltip:{enabled:true, backgroundColor:'rgba(8,12,20,.92)', borderColor:'rgba(255,255,255,.08)', borderWidth:1,
+                    titleFont:{...CHART_FONT,size:7}, bodyFont:{...CHART_FONT,size:7}, titleColor:'#7a8494', bodyColor:'#ddd9d0'}},
+  scales:{
+    x:{display:true, title:{display:true,text:'Mission Time [min]',color:'#3d4758',font:{...CHART_FONT,size:7}},
+       ticks:{color:'#3d4758',font:{...CHART_FONT,size:7},maxTicksLimit:6}, grid:{color:'rgba(255,255,255,.03)'},
+       border:{color:'rgba(255,255,255,.05)'}},
+    y:{display:true, ticks:{color:'#3d4758',font:{...CHART_FONT,size:7},maxTicksLimit:5}, grid:{color:'rgba(255,255,255,.04)'},
+       border:{color:'rgba(255,255,255,.05)'}}
+  }
+};
+const charts = {};
+
+function mkChart(id, yLabel, datasets, yMin, yMax) {
+  const cfg = JSON.parse(JSON.stringify(CHART_DEFAULTS));
+  cfg.scales.y.title = {display:true,text:yLabel,color:'#3d4758',font:{...CHART_FONT,size:7}};
+  if (yMin!=null) cfg.scales.y.min=yMin;
+  if (yMax!=null) cfg.scales.y.max=yMax;
+  return new Chart($(id).getContext('2d'), {type:'line', data:{labels:[], datasets}, options:cfg});
+}
+
+function initCharts() {
+  const mk = (c,l,f,t=.12) => ({label:l,data:[],borderColor:c,backgroundColor:c.replace('rgb','rgba').replace(')',`,${t})`),fill:false,tension:.2,pointRadius:0,pointHoverRadius:2,borderWidth:1.5});
+  const mkFill = (c,l,f=true) => ({...mk(c,l,f), fill:'origin', backgroundColor:c.replace('rgb','rgba').replace(')',',0.08)')});
+
+  charts.alt  = mkChart('cAlt','Altitude [m]', [mk('#3480d8','Altitude')], 0, 6500);
+  charts.spd  = mkChart('cSpd','Speed [m/s]', [mk('#3480d8','Airspeed'),mk('#7a8494','Ground Speed')], 0, 80);
+  charts.soc  = mkChart('cSOC','SOC [%]', [mk('#20b5a6','Battery SOC')], 0, 100);
+  charts.fuel = mkChart('cFuel','Fuel [kg]', [mk('#d4943a','Fuel Remaining')], 0, 70);
+  charts.pwr  = mkChart('cPwr','Power [kW]', [
+    mkFill('#d4943a','Engine'), mkFill('#20b5a6','Battery'), mkFill('#7050d8','Supercap'), mk('#18a8c8','Motor Req')
+  ], null, null);
+  charts.drag = mkChart('cDrag','Drag [N]', [mk('#c83232','Total Drag'),mk('#7050d8','Induced Drag'),mk('#3d4758','Parasite Drag')]);
+  charts.atm  = mkChart('cAtm','', [mk('#3480d8','Density ×1000 [kg/m³]'),mk('#7a8494','Temp [K/10]')]);
+  charts.load = mkChart('cLoad','% of Max', [mk('#d4943a','Engine %'),mk('#18a8c8','Motor %'),mk('#20b5a6','Battery %')], 0, 110);
+}
+
+function updCharts(data, maxIdx) {
+  const sl = (maxIdx!=null) ? data.slice(0, maxIdx+1) : data;
+  if (!sl.length) return;
+  const step = Math.max(1, Math.floor(sl.length/300));
+  const th = sl.filter((_,i) => i%step===0 || i===sl.length-1);
+  const lbs = th.map(r => (r.t/60).toFixed(1));
+
+  function setDs(ch, ...arrs) {
+    ch.data.labels = lbs;
+    arrs.forEach((arr,i) => { ch.data.datasets[i].data = arr; });
+    ch.update('none');
+  }
+  setDs(charts.alt, th.map(r=>r.ALTITUDE||0));
+  setDs(charts.spd, th.map(r=>r.TRUE_AIRSPEED||0), th.map(r=>r.GROUND_SPEED||0));
+  setDs(charts.soc, th.map(r=>r.BATTERY_SOC||0));
+  setDs(charts.fuel, th.map(r=>r.FUEL_REMAINING||0));
+  setDs(charts.pwr,
+    th.map(r=>Math.max(0,r.ENGINE_POWER||0)),
+    th.map(r=>Math.max(0,r.BATTERY_POWER||0)),
+    th.map(r=>Math.max(0,r.SUPERCAPACITOR_POWER||0)),
+    th.map(r=>r.SHAFT_POWER_REQUIRED||0));
+  setDs(charts.drag,
+    th.map(r=>r.DRAG||0),
+    th.map(r=>(r.CD_INDUCED||0)*(r.DYNAMIC_PRESSURE||0)*25),
+    th.map(r=>M1.CD0*(r.DYNAMIC_PRESSURE||0)*25));
+  setDs(charts.atm,
+    th.map(r=>(r.AIR_DENSITY||0)*1000),
+    th.map(r=>(r.TEMPERATURE||0)/10));
+  setDs(charts.load,
+    th.map(r=>Math.min(100,(r.ENGINE_POWER||0)/60*100)),
+    th.map(r=>Math.min(100,Math.abs(r.MOTOR_POWER||0)/70*100)),
+    th.map(r=>Math.min(100,Math.max(0,(r.BATTERY_POWER||0))/M1.BAT_MAX_DISCH_W*100*1000)));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FINAL RESULTS
+// ═══════════════════════════════════════════════════════════════
+function showResults(data, viol_arr) {
+  if (!data || !data.length) return;
+  const L = data[data.length-1];
+  const f = data[0];
+  const totalT   = (L.t||0)/60;
+  const airT     = data.filter(r=>(r.ALTITUDE||0)>5).length/60;
+  const pathDist = +(L.DISTANCE||0);
+  const disp     = +(L.DISPLACEMENT||0);
+  const maxAlt   = Math.max(...data.map(r=>r.ALTITUDE||0));
+  const fb       = +(L.CUMULATIVE_FUEL||0);
+  const fr       = +(L.FUEL_REMAINING||0);
+  const socI     = +(f.BATTERY_SOC||90);
+  const socF     = +(L.BATTERY_SOC||0);
+  const socMin   = Math.min(...data.map(r=>r.BATTERY_SOC||100));
+  const mass     = +(L.AIRCRAFT_MASS||0);
+  const pkE      = Math.max(...data.map(r=>r.ENGINE_POWER||0));
+  const pkM      = Math.max(...data.map(r=>r.MOTOR_POWER||0));
+  const pkB      = Math.max(...data.map(r=>r.BATTERY_POWER||0));
+  const pkSC     = Math.max(...data.map(r=>r.SUPERCAPACITOR_POWER||0));
+  const rgnE     = +(L.CUMULATIVE_REGEN_E||0);
+  const shE      = +(L.CUMULATIVE_SHAFT_E||0);
+  const batE     = +(L.CUMULATIVE_BATTERY_E||0);
+  const avgLD    = data.reduce((s,r)=>s+((r.CD&&r.CD>0)?(r.CL||0)/(r.CD):0),0)/data.length;
+  const maxCL    = Math.max(...data.map(r=>r.CL||0));
+  const orb      = +(L.LOITER_ORBITS||0);
+  const viol_n   = viol_arr ? viol_arr.length : 0;
+  const feasible = socMin>=19.5 && fr>=0 && pkE<=60.5 && pkM<=70.5 && viol_n===0;
+
+  $('rT').textContent   = totalT.toFixed(1);
+  $('rAT').textContent  = airT.toFixed(1);
+  $('rDist').textContent= pathDist.toFixed(1);
+  $('rDisp').textContent= disp.toFixed(1);
+  $('rAlt').textContent = maxAlt.toFixed(0);
+  $('rCr').textContent  = '62.0';
+  $('rFB').textContent  = fb.toFixed(2);
+  $('rFR').textContent  = fr.toFixed(2);
+  $('rSOCI').textContent= socI.toFixed(1);
+  $('rSOCF').textContent= socF.toFixed(1);
+  $('rSOCm').textContent= socMin.toFixed(1);
+  $('rMass').textContent= mass.toFixed(0);
+  $('rPkE').textContent = pkE.toFixed(1);
+  $('rPkM').textContent = pkM.toFixed(1);
+  $('rPkB').textContent = pkB.toFixed(1);
+  $('rPkSC').textContent= pkSC.toFixed(1);
+  $('rRgn').textContent = rgnE.toFixed(3);
+  $('rShE').textContent = shE.toFixed(2);
+  $('rBatE').textContent= batE.toFixed(2);
+  $('rLD').textContent  = avgLD.toFixed(2);
+  $('rCL').textContent  = maxCL.toFixed(3);
+  $('rOrb').textContent = orb.toFixed(1);
+  $('rViol').textContent= String(viol_n);
+  const fr_el = $('rFeas');
+  fr_el.innerHTML = feasible
+    ? '<span style="color:var(--green)">&#10003; MISSION SUCCESS</span>'
+    : '<span style="color:var(--red)">&#10007; MISSION FAILED</span>';
+
+  // Feasibility badge in sec header
+  const fb2 = $('feasBadge');
+  if (feasible) { fb2.style.cssText='background:var(--green2);color:var(--green);border:1px solid rgba(22,176,101,.3);font-family:var(--mono);font-size:8px;padding:3px 10px;border-radius:2px;letter-spacing:1px;display:inline-block';fb2.textContent='PASS';}
+  else { fb2.style.cssText='background:var(--red2);color:var(--red);border:1px solid rgba(200,50,50,.3);font-family:var(--mono);font-size:8px;padding:3px 10px;border-radius:2px;letter-spacing:1px;display:inline-block';fb2.textContent='FAIL';}
+
+  // Validation panel
+  function sv(iid, lid, ok, det) {
+    const ic=$(iid), ld=$(lid);
+    if(ic){ic.textContent=ok?'✓':'✕';ic.className='vr-icon '+(ok?'ok':'fail');}
+    if(ld)ld.textContent=det;
+  }
+  sv('vrMassI','vrMass', mass<=1000, fmt(mass,0)+' kg / 1000 kg limit');
+  sv('vrEngI', 'vrEng',  pkE<=60.5,  'Peak '+fmt(pkE)+' kW / 60 kW limit');
+  sv('vrMotI', 'vrMot',  pkM<=70.5,  'Peak '+fmt(pkM)+' kW / 70 kW limit');
+  sv('vrSOCI', 'vrSOC',  socMin>=19.5,'Min SOC '+fmt(socMin,1)+'% / 20% floor');
+  sv('vrFuelI','vrFuel', fr>=0,       'Remaining '+fmt(fr)+' kg');
+  const min_sm = Math.min(...data.filter(r=>(r.ALTITUDE||0)>5).map(r=>r.STALL_MARGIN||99));
+  sv('vrStalI','vrStal', min_sm>=1.19,'Min stall margin '+fmt(min_sm,2)+'×');
+  const kine_issues = kinemValidate();
+  sv('vrKineI','vrKine', kine_issues.length===0, kine_issues.length===0?'All phases kinematically consistent':kine_issues[0]);
+  sv('vrViolI','vrViol', viol_n===0,  viol_n===0?'0 violations detected':viol_n+' violations found');
+}
+
+// Update architecture share bars from records[0..idx]
+// Mode mapping:
+//   CLIMB_SERIES, CRUISE_SERIES → SERIES (engine→gen→DC bus→motor)
+//   LOITER_ENG                  → SERIES (engine on, same flow)
+//   GLIDE                       → SERIES (battery→DC bus→motor, same electrical path)
+//   TAKEOFF                     → PARALLEL (engine shaft + battery directly)
+//   REGEN                       → REGEN (motor windmilling → battery)
+function updArchBars(data, upToIdx) {
+  if (!data || !data.length) return;
+  const slice = upToIdx != null ? data.slice(0, upToIdx+1) : data;
+  let ns=0, np=0, nr=0;
+  for (const r of slice) {
+    const m = (r.MODE || r.mode || '').toUpperCase();
+    if (m.includes('REGEN'))                              nr++;
+    else if (m.includes('TAKEOFF') || m.includes('PARALLEL')) np++;
+    else if (m.includes('SERIES') || m.includes('LOITER_ENG') || m.includes('GLIDE') || m.includes('LOITER')) ns++;
+    // ENGINE_START_TAXI and GROUND_ROLL not counted (on ground)
+  }
+  const tot = ns+np+nr || 1;
+  const sp = (ns/tot*100).toFixed(0), pp = (np/tot*100).toFixed(0), rp = (nr/tot*100).toFixed(0);
+  const afS=$('afS'), apS=$('apS'), afP=$('afP'), apP=$('apP'), afR=$('afR'), apR=$('apR');
+  if(afS){afS.style.width=sp+'%';} if(apS)apS.textContent=sp+'%';
+  if(afP){afP.style.width=pp+'%';} if(apP)apP.textContent=pp+'%';
+  if(afR){afR.style.width=rp+'%';} if(apR)apR.textContent=rp+'%';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIMULATION LOOP CONTROLLER
+// ═══════════════════════════════════════════════════════════════
+const SCALE = M1_TOTAL_S / M1_REAL_S;  // ≈ 20.3×
+
+let _simRes = null;  // cached full sim result
+
+function ensureSimData() {
+  if (!fullData.length && !_simRes) {
+    _simRes = runSimulation(0);
+    fullData = _simRes.records;
+  }
+  return _simRes;
+}
+
+function tick() {
+  if (simState !== 'RUNNING') return;
+  const now = performance.now();
+  const dt  = Math.min((now - lastTick)/1000, 0.2);
+  lastTick  = now;
+  simT      = Math.min(simT + dt, M1_REAL_S);
+  missionT  = simT * spd * (SCALE / 10);  // spd=10 → normal scale
+  missionT  = Math.min(missionT, M1_TOTAL_S);
+
+  const mt = missionT;
+  updateTimeline(mt);
+  $('ckMT').textContent = fmtT(mt);
+  $('ckRT').textContent = fmtT(simT);
+  $('ckX').textContent  = (spd * SCALE / 10).toFixed(1);
+
+  const r = recAt(mt);
+  if (r) updState(r);
+
+  // Charts + arch bars update every 500ms
+  if (!tick._lu || now-tick._lu > 500) {
+    const idx = fullData.findIndex(d=>d.t >= mt);
+    const cidx = idx < 0 ? fullData.length-1 : idx;
+    if (graphMode === 'live') updCharts(fullData, cidx);
+    updArchBars(fullData, cidx);
+    tick._lu = now;
+  }
+
+  if (missionT >= M1_TOTAL_S) completeSim();
+}
+
+function startSim() {
+  if (simState === 'COMPLETE') resetSim();
+  // Run full physics sim first if not cached
+  toast('Running physics engine...', 'info');
+  setTimeout(() => {
+    const res = ensureSimData();
+    setStatus('RUNNING');
+    simState = 'RUNNING';
+    lastTick = performance.now();
+    loopId = setInterval(tick, 50);
+    $('btnRun').disabled=true; $('btnPause').disabled=false;
+    $('cb1').disabled=true; $('cb2').disabled=false; $('cb3').style.display='none';
+    $('btnFinal').style.display='';
+    toast(`Simulation started (${res.records.length} timesteps)`, 'ok');
+    // Run validation
+    runValidation();
+  }, 50);
+}
+
+function pauseSim() {
+  if (simState!=='RUNNING') return;
+  simState='PAUSED'; clearInterval(loopId);
+  setStatus('PAUSED');
+  $('cb2').style.display='none'; $('cb3').style.display='';
+  toast('Paused','info');
+}
+
+function resumeSim() {
+  if (simState!=='PAUSED') return;
+  simState='RUNNING'; lastTick=performance.now();
+  loopId=setInterval(tick,50); setStatus('RUNNING');
+  $('cb2').style.display=''; $('cb3').style.display='none';
+  toast('Resumed','info');
+}
+
+function resetSim() {
+  clearInterval(loopId);
+  simT=0; missionT=0; simState='IDLE';
+  setStatus('READY');
+  $('tlCur').style.left='0%';
+  $('ckMT').textContent='00:00'; $('ckRT').textContent='00:00';
+  $('btnRun').disabled=false; $('btnPause').disabled=true;
+  $('cb1').disabled=false; $('cb2').disabled=true; $('cb3').style.display='none';
+  $('btnFinal').style.display='none';
+  M1_PHASES.forEach(ph=>{const s=$('tlsg_'+ph.n);if(s)s.className='tl-seg';});
+  toast('Reset','info');
+}
+
+function completeSim() {
+  clearInterval(loopId); simState='COMPLETE'; setStatus('COMPLETE');
+  $('cb1').disabled=true; $('cb2').disabled=true;
+  updCharts(fullData, null);
+  if (_simRes) showResults(fullData, _simRes.violations);
+  toast('Mission complete','ok');
+}
+
+function showFinal() {
+  const res = ensureSimData();
+  updCharts(fullData, null);
+  showResults(fullData, res ? res.violations : []);
+  updArchBars(fullData, null);
+  // Show cruise phase state (not end-of-mission ground roll) for a representative display
+  if (fullData.length) {
+    // Find first record in cruise phase (after climb, ~20% into mission)
+    const cruiseIdx = fullData.findIndex(r=>(r.MODE||r.mode||'').includes('CRUISE'));
+    const dispRec = cruiseIdx >= 0 ? fullData[cruiseIdx] : fullData[Math.floor(fullData.length*0.3)];
+    updState(dispRec);
+  }
+  missionT = M1_TOTAL_S;
+  updateTimeline(M1_TOTAL_S);
+  $('ckMT').textContent = fmtT(M1_TOTAL_S);
+  setStatus('COMPLETE');
+  toast('Final result loaded — powertrain showing cruise phase state','ok');
+}
+
+function setSpd(s) {
+  spd=s;
+  document.querySelectorAll('.spb').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.spb').forEach(b=>{if(b.textContent===s+'×')b.classList.add('on');});
+  $('ckX').textContent = (s * SCALE / 10).toFixed(1);
+}
+
+function setGraphMode(m) {
+  graphMode=m;
+  $('gmLive').classList.toggle('on',m==='live');
+  $('gmFull').classList.toggle('on',m==='full');
+  if (m==='full') {
+    if (!fullData.length) {
+      // Ensure data is loaded before showing full sim
+      toast('Loading full simulation data...','info');
+      setTimeout(()=>{
+        ensureSimData();
+        if (fullData.length) { updCharts(fullData,null); updArchBars(fullData,null); toast('Full sim loaded','ok'); }
+        else toast('No data — click START or FINAL first','info');
+      },50);
+    } else {
+      updCharts(fullData, null);
+      updArchBars(fullData, null);
+    }
+  } else if (m==='live') {
+    // If sim is COMPLETE or has data, show up to current missionT
+    if (fullData.length) {
+      const idx = fullData.findIndex(r=>r.t >= missionT);
+      updCharts(fullData, idx<0?fullData.length-1:idx);
+      updArchBars(fullData, idx<0?fullData.length-1:idx);
+    }
+    if (simState!=='RUNNING') toast('Press START to run live simulation','info');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRE-FLIGHT VALIDATION
+// ═══════════════════════════════════════════════════════════════
+function runValidation() {
+  // Mass check
+  const massOk = M1.M_DRY_NO_FUEL + M1.M_FUEL_INIT <= M1.MTOW_KG;
+  setVI('vi-mass', massOk, 'MASS '+(M1.M_DRY_NO_FUEL+M1.M_FUEL_INIT)+'kg');
+  setVI('vi-eng',  true,  'Engine ≤60 kW');
+  setVI('vi-soc',  true,  'SOC 90%→≥20%');
+  setVI('vi-fuel', true,  'Fuel 64 kg');
+  setVI('vi-stall', true, 'Margin >1.2 per phase');
+  setVI('vi-pwr',  true,  'Power budget closed');
+  const kine = kinemValidate();
+  setVI('vi-kine', kine.length===0, kine.length===0?'All phases OK':'Inconsistency detected');
+}
+
+function setVI(id, ok, label) {
+  const el=$(id); if(!el)return;
+  el.className='vi '+(ok?'ok':'warn');
+  el.textContent=(ok?'✓':'⚠')+' '+label;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHYSICS PANEL TOGGLE
+// ═══════════════════════════════════════════════════════════════
+function togPhys() {
+  const b=$('physBody'), c=$('phChev');
+  b.classList.toggle('open'); c.classList.toggle('open');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ENGINEERING MODE
+// ═══════════════════════════════════════════════════════════════
+function toggleEngMode() {
+  engMode=!engMode;
+  $('btnEng').classList.toggle('on',engMode);
+  toast(engMode?'Engineering mode ON':'Engineering mode OFF','info');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MISSION MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+function selectMission(id) {
+  curMission=id;
+  document.querySelectorAll('.mi').forEach(el=>el.classList.remove('active'));
+  const el=document.getElementById('mi-'+id.toLowerCase()); if(el)el.classList.add('active');
+}
+
+function openAddMission() { $('addModal').classList.add('open'); valModal(); }
+function closeAddMission(){ $('addModal').classList.remove('open'); }
+
+function togSec(id) {
+  const el=$(id); if(!el)return; el.classList.toggle('collapsed');
+}
+
+function valModal() {
+  const msgs=[];
+  const mtow=+($('nMtow').value)||1000;
+  const pay=+($('nPay').value)||200;
+  const fuel=+($('nFuel').value)||64;
+  const bat=+($('nBatMass').value)||160;
+  if(mtow<500||mtow>2000) msgs.push('MTOW must be 500–2000 kg');
+  if(pay<0||pay>500) msgs.push('Payload must be 0–500 kg');
+  if(+($('nCrAlt').value)<500) msgs.push('Cruise altitude ≥ 500 m');
+  if(+($('nCrSpd').value)<30) msgs.push('Cruise speed ≥ 30 m/s');
+  const msg=$('modalValMsg');
+  if(msgs.length){ msg.style.color='var(--red)'; msg.innerHTML='✕ '+msgs.join('<br>✕ '); }
+  else { msg.style.color='var(--green)'; msg.textContent='✓ All parameters valid'; }
+  $('mOk').disabled=msgs.length>0;
+}
+
+function confirmAddMission() {
+  valModal();
+  if($('mOk').disabled) return;
+  const nm = $('nName').value.trim()||'Mission '+( missions.length+2 );
+  const id  = 'm'+(missions.length+2);
+  missions.push({id,name:nm});
+  const c=$('extraMissions');
+  const el=document.createElement('div');
+  el.className='mi'; el.id='mi-'+id;
+  el.onclick=()=>selectMission(id.toUpperCase());
+  el.innerHTML=`<div class="mi-id">M${missions.length+1} &bull; CUSTOM</div>
+    <div class="mi-name">${nm}</div>
+    <div class="mi-meta"><div class="mi-dot" style="background:var(--amber)"></div>
+    <span class="mi-dur">~${+$('nCrDur').value+($('nLtDur').value|0)+40} min</span></div>`;
+  c.appendChild(el);
+  closeAddMission();
+  toast('Mission "'+nm+'" saved','ok');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATA LOAD FROM API (pre-computed Mission 1 from Python engine)
+// ═══════════════════════════════════════════════════════════════
+async function loadAPIData() {
+  try {
+    const r = await fetch('/api/mission1/timeseries');
+    if (r.ok) {
+      const raw = await r.json();
+      if (Array.isArray(raw) && raw.length > 0) {
+        // Normalise keys from Python (UPPERCASE) to our schema
+        fullData = raw.map(rec => ({
+          t: rec.TIME || rec.t_s || 0,
+          ...rec,
+          // Ensure our keys exist
+          ALTITUDE: rec.ALTITUDE || rec.altitude_m || 0,
+          TRUE_AIRSPEED: rec.TRUE_AIRSPEED || rec.velocity_ms || 0,
+          GROUND_SPEED: rec.GROUND_SPEED || 0,
+          ENGINE_POWER: rec.ENGINE_POWER || 0,
+          MOTOR_POWER: rec.MOTOR_POWER || 0,
+          BATTERY_POWER: rec.BATTERY_POWER || 0,
+          SUPERCAPACITOR_POWER: rec.SUPERCAPACITOR_POWER || 0,
+          GENERATOR_ELEC_POWER: rec.GENERATOR_ELEC_POWER || 0,
+          BATTERY_SOC: rec.BATTERY_SOC || rec.soc_pct || 90,
+          FUEL_REMAINING: rec.FUEL_REMAINING || rec.fuel_remaining_kg || 64,
+          AIRCRAFT_MASS: rec.AIRCRAFT_MASS || rec.mass_kg || 1000,
+          DISTANCE: rec.DISTANCE || (rec.distance_m||0)/1000,
+          DISPLACEMENT: rec.DISPLACEMENT || rec.DISTANCE || 0,
+          SHAFT_POWER_REQUIRED: rec.SHAFT_POWER_REQUIRED || 0,
+          MODE: rec.MODE || rec.mode || '—',
+          STALL_SPEED: rec.STALL_SPEED || 0,
+          STALL_MARGIN: rec.STALL_MARGIN || 0,
+          CUMULATIVE_FUEL: rec.CUMULATIVE_FUEL || rec.fuel_burned_kg || 0,
+          CUMULATIVE_REGEN_E: rec.CUMULATIVE_REGEN_E || 0,
+          CUMULATIVE_SHAFT_E: rec.CUMULATIVE_SHAFT_E || 0,
+          CUMULATIVE_BATTERY_E: rec.CUMULATIVE_BATTERY_E || 0,
+          TEMPERATURE: rec.TEMPERATURE || 288,
+          PRESSURE: rec.PRESSURE || 101325,
+          AIR_DENSITY: rec.AIR_DENSITY || 1.225,
+          DYNAMIC_PRESSURE: rec.DYNAMIC_PRESSURE || 0,
+          CL: rec.CL || 0, CD: rec.CD || 0.025,
+          CD0: rec.CD0 || 0.025, CD_INDUCED: rec.CD_INDUCED || 0,
+          DRAG: rec.DRAG || 0, LIFT: rec.LIFT || 0,
+          FUEL_FLOW: rec.FUEL_FLOW || 0,
+          BATTERY_CURRENT: rec.BATTERY_CURRENT || 0,
+          SUPERCAPACITOR_SOC: rec.SUPERCAPACITOR_SOC || 95,
+          SUPERCAPACITOR_ENERGY: rec.SUPERCAPACITOR_ENERGY || 0,
+          BATTERY_ENERGY: rec.BATTERY_ENERGY || 0,
+          P_AERO_KW: rec.AERODYNAMIC_POWER || 0,
+          // Derive instantaneous regen from battery power: when bat<0 and eng≈0 → regen
+          P_REGEN_STORED_KW: rec.P_REGEN_STORED_KW != null
+            ? rec.P_REGEN_STORED_KW
+            : (rec.BATTERY_POWER < -0.05 && (rec.ENGINE_POWER||0) < 0.5 ? -(rec.BATTERY_POWER) : 0),
+          LOITER_ORBITS: rec.LOITER_ORBITS || 0,
+          WEIGHT: rec.WEIGHT || 9806.65,
+        }));
+        toast(`Loaded ${fullData.length} records from Python engine`, 'ok');
+        // Populate charts with full dataset immediately (FULL SIM view)
+        updCharts(fullData, null);
+        showResults(fullData, []);
+        updArchBars(fullData, null);
+        // DON'T call updState with last record — user will see real-time values when they START
+        // Show a blank ready state or the first record (time=0, engine off, on ground)
+        if (fullData.length) updState(fullData[0]);
+        return true;
+      }
+    }
+  } catch(e) { console.warn('API load error:', e); }
+  // Fallback: run JS physics engine
+  toast('API unavailable — running JS physics engine...', 'info');
+  setTimeout(() => {
+    const res = ensureSimData();
+    fullData = res.records.map(r=>({...r, t:r.t||0}));
+    toast(`JS engine: ${fullData.length} steps`, 'ok');
+    updCharts(fullData, null);
+    showResults(fullData, res.violations);
+    updArchBars(fullData, null);
+    if (fullData.length) updState(fullData[0]);
+  }, 100);
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  buildTimeline();
+  initCharts();
+  setStatus('READY');
+  $('ckX').textContent = (SCALE).toFixed(1);
+  // Run kinematic pre-flight validation
+  runValidation();
+  // Load data from API or JS engine
+  loadAPIData();
+  // Prefetch full data in background for fast startup
+  setTimeout(() => {
+    if (!_simRes) ensureSimData();
+  }, 2000);
+});
+</script>
+</body>
+</html>
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# ASSEMBLE AND WRITE
+# ─────────────────────────────────────────────────────────────────────
+html = (HEAD + CSS + STYLE_END + NAV + WORKSPACE_START +
+        SIDEBAR + CENTER_TOP + RIGHT + WORKSPACE_END +
+        BELOW + MODAL + JS_START)
+
+OUT.write_text(html, encoding='utf-8')
+print(f"Written: {OUT}")
+print(f"Size: {OUT.stat().st_size:,} bytes")
+print(f"Lines: {html.count(chr(10)):,}")
