@@ -1891,24 +1891,52 @@ function updState(r) {
 // CHART SETUP (Chart.js)
 // ═══════════════════════════════════════════════════════════════
 const CHART_FONT = {family:"'JetBrains Mono',monospace"};
+const AXIS_COLOR  = '#8a94a8';   // readable light grey (was #3d4758 — nearly invisible)
+const TICK_SIZE   = 10;          // tick label font size (was 7)
+const LABEL_SIZE  = 10;          // axis title font size (was 7)
+const LEGEND_SIZE = 9;           // legend font size (was 7)
+const TOOLTIP_SIZE= 10;          // tooltip font size (was 7)
+
 const CHART_DEFAULTS = {
   responsive:true, maintainAspectRatio:false, animation:false,
-  plugins:{legend:{display:true, labels:{font:{...CHART_FONT,size:7},color:'#3d4758',boxWidth:10,padding:8}},
-           tooltip:{enabled:true, backgroundColor:'rgba(8,12,20,.92)', borderColor:'rgba(255,255,255,.08)', borderWidth:1,
-                    titleFont:{...CHART_FONT,size:7}, bodyFont:{...CHART_FONT,size:7}, titleColor:'#7a8494', bodyColor:'#ddd9d0'}},
+  plugins:{
+    legend:{
+      display:true,
+      labels:{font:{...CHART_FONT,size:LEGEND_SIZE}, color:'#6b7a90', boxWidth:10, padding:10}
+    },
+    tooltip:{
+      enabled:true,
+      backgroundColor:'rgba(8,12,20,.95)',
+      borderColor:'rgba(255,255,255,.10)',
+      borderWidth:1,
+      padding:8,
+      titleFont:{...CHART_FONT,size:TOOLTIP_SIZE, weight:'500'},
+      bodyFont:{...CHART_FONT,size:TOOLTIP_SIZE},
+      titleColor:'#aab4c4',
+      bodyColor:'#ddd9d0'
+    }
+  },
   scales:{
-    x:{display:true, title:{display:true,text:'Mission Time [min]',color:'#3d4758',font:{...CHART_FONT,size:7}},
-       ticks:{color:'#3d4758',font:{...CHART_FONT,size:7},maxTicksLimit:6}, grid:{color:'rgba(255,255,255,.03)'},
-       border:{color:'rgba(255,255,255,.05)'}},
-    y:{display:true, ticks:{color:'#3d4758',font:{...CHART_FONT,size:7},maxTicksLimit:5}, grid:{color:'rgba(255,255,255,.04)'},
-       border:{color:'rgba(255,255,255,.05)'}}
+    x:{
+      display:true,
+      title:{display:true, text:'Mission Time [min]', color:AXIS_COLOR, font:{...CHART_FONT,size:LABEL_SIZE, weight:'500'}},
+      ticks:{color:AXIS_COLOR, font:{...CHART_FONT,size:TICK_SIZE}, maxTicksLimit:7, padding:4},
+      grid:{color:'rgba(255,255,255,.04)'},
+      border:{color:'rgba(255,255,255,.07)'}
+    },
+    y:{
+      display:true,
+      ticks:{color:AXIS_COLOR, font:{...CHART_FONT,size:TICK_SIZE}, maxTicksLimit:6, padding:4},
+      grid:{color:'rgba(255,255,255,.05)'},
+      border:{color:'rgba(255,255,255,.07)'}
+    }
   }
 };
 const charts = {};
 
 function mkChart(id, yLabel, datasets, yMin, yMax) {
   const cfg = JSON.parse(JSON.stringify(CHART_DEFAULTS));
-  cfg.scales.y.title = {display:true,text:yLabel,color:'#3d4758',font:{...CHART_FONT,size:7}};
+  cfg.scales.y.title = {display:true, text:yLabel, color:AXIS_COLOR, font:{...CHART_FONT, size:LABEL_SIZE, weight:'500'}};
   if (yMin!=null) cfg.scales.y.min=yMin;
   if (yMax!=null) cfg.scales.y.max=yMax;
   return new Chart($(id).getContext('2d'), {type:'line', data:{labels:[], datasets}, options:cfg});
